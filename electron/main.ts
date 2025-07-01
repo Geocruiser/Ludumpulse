@@ -9,6 +9,8 @@ import { app, BrowserWindow, shell, ipcMain, Menu } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+// Import news scraper using require to avoid ES module conflicts
+let newsScraperMain: any = null
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -47,7 +49,7 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 let win: BrowserWindow | null = null
 // Here, you can also use other preload
 const preload = path.join(__dirname, 'preload.cjs')
-const url = process.env.VITE_DEV_SERVER_URL
+const url = process.env.VITE_DEV_SERVER_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null)
 const indexHtml = path.join(process.env.DIST, 'index.html')
 
 /**
@@ -99,6 +101,92 @@ async function createWindow() {
   // update(win)
 }
 
+// Initialize news scraper lazily
+async function getNewsScraper() {
+  if (!newsScraperMain) {
+    try {
+      // Use require to load puppeteer in CommonJS context
+      const puppeteer = require('puppeteer')
+      
+      // Simple news scraper implementation
+      newsScraperMain = {
+        browser: null,
+        
+        async initialize() {
+          if (!this.browser) {
+            this.browser = await puppeteer.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            })
+          }
+        },
+        
+        async scrapeGameNews(gameTitle: string) {
+          await this.initialize()
+          
+          // For now, return mock data to avoid complex scraping logic
+          // This can be expanded later once the ES module issues are resolved
+          return [{
+            sourceId: 'mock',
+            success: true,
+            articles: [{
+              title: `Sample news for ${gameTitle}`,
+              url: 'https://example.com',
+              publishedAt: new Date().toISOString(),
+              summary: `This is a sample news article about ${gameTitle}.`,
+              source: 'Mock Source'
+            }],
+            scrapedAt: new Date().toISOString(),
+            processingTime: 100
+          }]
+        },
+        
+        async dispose() {
+          if (this.browser) {
+            await this.browser.close()
+            this.browser = null
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to initialize news scraper:', error)
+      throw error
+    }
+  }
+  return newsScraperMain
+}
+
+// Set up IPC handlers for news scraping
+ipcMain.handle('scrape-game-news', async (event, gameTitle: string) => {
+  try {
+    const scraper = await getNewsScraper()
+    const results = await scraper.scrapeGameNews(gameTitle)
+    return { success: true, data: results }
+  } catch (error) {
+    console.error('Error in scrape-game-news IPC handler:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
+  }
+})
+
+ipcMain.handle('dispose-news-scraper', async () => {
+  try {
+    if (newsScraperMain) {
+      await newsScraperMain.dispose()
+      newsScraperMain = null
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('Error disposing news scraper:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
+  }
+})
+
 app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
@@ -134,7 +222,7 @@ ipcMain.handle('open-win', (_, arg) => {
     },
   })
 
-  if (process.env.VITE_DEV_SERVER_URL && url) {
+  if (url) {
     childWindow.loadURL(`${url}#${arg}`)
   } else {
     childWindow.loadFile(indexHtml, { hash: arg })

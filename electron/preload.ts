@@ -27,6 +27,16 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   },
 })
 
+// --------- News Scraping API ---------
+contextBridge.exposeInMainWorld('newsScraper', {
+  scrapeGameNews: (gameTitle: string) => {
+    return ipcRenderer.invoke('scrape-game-news', gameTitle)
+  },
+  dispose: () => {
+    return ipcRenderer.invoke('dispose-news-scraper')
+  }
+})
+
 // --------- Preload scripts loading ---------
 function domReady(condition: DocumentReadyState[] = ['complete', 'interactive']) {
   return new Promise((resolve) => {

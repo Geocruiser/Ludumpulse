@@ -1,6 +1,6 @@
 ## Implementation Phases
 
-### Phase 1: Foundation & Core Infrastructure 
+### Phase 1: Foundation & Core Infrastructure (done)
 
 #### 1.1 Project Setup
 - [ ] Initialize Electron + Next.js project with TypeScript
@@ -53,7 +53,7 @@
 - [ ] Add keyboard shortcuts for power users
 - [ ] Implement dark/light theme switching
 
-### Phase 3: AI & News Integration (Week 5-6)
+### Phase 3: AI & News Integration 
 
 #### 3.1 News Scraping Infrastructure
 - [ ] Set up Puppeteer for dynamic content scraping

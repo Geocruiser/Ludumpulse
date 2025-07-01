@@ -25,7 +25,13 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="ludumpulse-ui-theme">
+      <ThemeProvider 
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+        storageKey="ludumpulse-ui-theme"
+      >
         <AuthProvider>
           <AppRouter />
           <Toaster />

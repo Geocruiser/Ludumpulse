@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
     return ipcRenderer.invoke(channel, ...omit);
   }
 });
+contextBridge.exposeInMainWorld("newsScraper", {
+  scrapeGameNews: (gameTitle) => {
+    return ipcRenderer.invoke("scrape-game-news", gameTitle);
+  },
+  dispose: () => {
+    return ipcRenderer.invoke("dispose-news-scraper");
+  }
+});
 function domReady(condition = ["complete", "interactive"]) {
   return new Promise((resolve) => {
     if (condition.includes(document.readyState)) {
@@ -103,24 +111,3 @@ window.onmessage = (ev) => {
   ev.data.payload === "removeLoading" && removeLoading();
 };
 setTimeout(removeLoading, 4999);
-;
-      return {
-        appendLoading() {
-          safeDOM.append(document.head, oStyle);
-          safeDOM.append(document.body, oDiv);
-        },
-        removeLoading() {
-          safeDOM.remove(document.head, oStyle);
-          safeDOM.remove(document.body, oDiv);
-        }
-      };
-    }
-    const { appendLoading, removeLoading } = useLoading();
-    domReady().then(appendLoading);
-    window.onmessage = (ev) => {
-      ev.data.payload === "removeLoading" && removeLoading();
-    };
-    setTimeout(removeLoading, 4999);
-  }
-});
-export default require_preload();

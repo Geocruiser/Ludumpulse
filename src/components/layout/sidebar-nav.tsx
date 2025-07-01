@@ -51,27 +51,53 @@ const navigationItems = [
   },
 ]
 
+type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'notifications' | 'settings'
+
+interface SidebarNavProps {
+  currentPage: PageType
+  onPageChange: (page: PageType) => void
+}
+
 /**
  * Sidebar navigation with main application links
  */
-export function SidebarNav() {
+export function SidebarNav({ currentPage, onPageChange }: SidebarNavProps) {
+  const getPageType = (href: string): PageType => {
+    switch (href) {
+      case '/': return 'dashboard'
+      case '/games': return 'games'
+      case '/news': return 'news'
+      case '/suggestions': return 'suggestions'
+      case '/notifications': return 'notifications'
+      case '/settings': return 'settings'
+      default: return 'dashboard'
+    }
+  }
+
   return (
     <aside className="w-64 border-r bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <nav className="p-4 space-y-2">
-        {navigationItems.map((item) => (
-          <Button
-            key={item.href}
-            variant="ghost"
-            className={cn(
-              "w-full justify-start",
-              // You can add active state logic here later
-              "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <item.icon className="mr-2 h-4 w-4" />
-            {item.title}
-          </Button>
-        ))}
+        {navigationItems.map((item) => {
+          const pageType = getPageType(item.href)
+          const isActive = currentPage === pageType
+          
+          return (
+            <Button
+              key={item.href}
+              variant="ghost"
+              onClick={() => onPageChange(pageType)}
+              className={cn(
+                "w-full justify-start",
+                isActive 
+                  ? "bg-accent text-accent-foreground" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <item.icon className="mr-2 h-4 w-4" />
+              {item.title}
+            </Button>
+          )
+        })}
       </nav>
     </aside>
   )
