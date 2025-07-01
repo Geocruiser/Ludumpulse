@@ -136,7 +136,6 @@ export function GameDetailModal() {
     
     try {
       await scrapeGameNews.mutateAsync({
-        gameId: game.id,
         gameTitle: game.title
       })
     } catch (error) {

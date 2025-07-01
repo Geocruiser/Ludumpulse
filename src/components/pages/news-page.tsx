@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { NewsItem } from '@/types/news'
+import { NewsItem, ScrapedArticle } from '@/types/news'
 import { formatDistanceToNow } from 'date-fns'
 
 export function NewsPage() {
@@ -26,12 +26,12 @@ export function NewsPage() {
 
   // Hooks
   const { data: recentNews, isLoading: isLoadingNews, refetch: refetchNews } = useRecentNews(50)
-  const { data: searchResults, isLoading: isSearching } = useSearchNews(searchQuery, selectedGameId)
+  const { data: searchResults, isLoading: isSearching } = useSearchNews(searchQuery)
   const { data: games } = useTrackedGames()
   const scrapeGameNews = useScrapeGameNews()
 
   // Determine which news to display
-  const displayedNews = searchQuery.trim() ? searchResults : recentNews
+  const displayedNews: ScrapedArticle[] = searchQuery.trim() ? (searchResults || []) : (recentNews || [])
 
   /**
    * Handle manual news refresh
@@ -56,7 +56,6 @@ export function NewsPage() {
       // Scrape news for each tracked game
       const scrapePromises = games.map(game =>
         scrapeGameNews.mutateAsync({
-          gameId: game.id,
           gameTitle: game.title
         })
       )
@@ -67,19 +66,7 @@ export function NewsPage() {
     }
   }
 
-  /**
-   * Format news item date
-   */
-  function formatNewsDate(dateString: string | null): string {
-    if (!dateString) return 'Unknown date'
-    
-    try {
-      const date = new Date(dateString)
-      return formatDistanceToNow(date, { addSuffix: true })
-    } catch {
-      return 'Invalid date'
-    }
-  }
+
 
   /**
    * Get sentiment badge color
@@ -189,7 +176,7 @@ export function NewsPage() {
 
         {displayedNews?.map((newsItem, index) => (
           <motion.div
-            key={newsItem.id}
+            key={`${newsItem.url}-${index}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
@@ -205,15 +192,7 @@ export function NewsPage() {
 /**
  * Individual news item card component
  */
-function NewsCard({ newsItem }: { newsItem: NewsItem }) {
-  /**
-   * Get game title from newsItem if available
-   */
-  function getGameTitle(): string | null {
-    // @ts-ignore - This might have joined data from the query
-    return newsItem.tracked_games?.title || null
-  }
-
+function NewsCard({ newsItem }: { newsItem: ScrapedArticle }) {
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="space-y-3">
@@ -226,16 +205,8 @@ function NewsCard({ newsItem }: { newsItem: NewsItem }) {
               <Badge variant="secondary">{newsItem.source}</Badge>
               <div className="flex items-center space-x-1">
                 <Calendar className="h-3 w-3" />
-                <span>{formatDistanceToNow(new Date(newsItem.published_at || newsItem.created_at), { addSuffix: true })}</span>
+                <span>{formatNewsDate(newsItem.publishedAt)}</span>
               </div>
-              {getGameTitle() && (
-                <Badge variant="outline">{getGameTitle()}</Badge>
-              )}
-              {newsItem.sentiment && (
-                <Badge className={getSentimentColor(newsItem.sentiment)}>
-                  {newsItem.sentiment}
-                </Badge>
-              )}
             </div>
           </div>
           
@@ -247,21 +218,11 @@ function NewsCard({ newsItem }: { newsItem: NewsItem }) {
         </div>
       </CardHeader>
       
-      {(newsItem.ai_summary || newsItem.summary) && (
+      {newsItem.summary && (
         <CardContent className="pt-0">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {newsItem.ai_summary || newsItem.summary}
+            {newsItem.summary}
           </p>
-          {newsItem.ai_summary && newsItem.summary && newsItem.ai_summary !== newsItem.summary && (
-            <details className="mt-3">
-              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                Original summary
-              </summary>
-              <p className="text-xs text-muted-foreground mt-2">
-                {newsItem.summary}
-              </p>
-            </details>
-          )}
         </CardContent>
       )}
     </Card>

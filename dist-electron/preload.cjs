@@ -18,13 +18,20 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
     return ipcRenderer.invoke(channel, ...omit);
   }
 });
+console.log("Preload script: Setting up newsScraper API...");
 contextBridge.exposeInMainWorld("newsScraper", {
   scrapeGameNews: (gameTitle) => {
+    console.log("newsScraper.scrapeGameNews called with:", gameTitle);
     return ipcRenderer.invoke("scrape-game-news", gameTitle);
   },
   dispose: () => {
+    console.log("newsScraper.dispose called");
     return ipcRenderer.invoke("dispose-news-scraper");
   }
+});
+console.log("Preload script: newsScraper API setup complete");
+window.addEventListener("DOMContentLoaded", () => {
+  console.log("Preload script: Testing newsScraper availability:", typeof window.newsScraper);
 });
 function domReady(condition = ["complete", "interactive"]) {
   return new Promise((resolve) => {
@@ -93,7 +100,7 @@ function useLoading() {
   oStyle.id = "app-loading-style";
   oStyle.innerHTML = styleContent;
   oDiv.className = "app-loading-wrap";
-  oDiv.innerHTML = `<div class="${className}"><div></div></div>`;
+  oDiv.innerHTML = '<div class="' + className + '"><div></div></div>';
   return {
     appendLoading() {
       safeDOM.append(document.head, oStyle);
@@ -111,3 +118,24 @@ window.onmessage = (ev) => {
   ev.data.payload === "removeLoading" && removeLoading();
 };
 setTimeout(removeLoading, 4999);
+nerHTML = '<div class="' + className + '"><div></div></div>';
+      return {
+        appendLoading() {
+          safeDOM.append(document.head, oStyle);
+          safeDOM.append(document.body, oDiv);
+        },
+        removeLoading() {
+          safeDOM.remove(document.head, oStyle);
+          safeDOM.remove(document.body, oDiv);
+        }
+      };
+    }
+    const { appendLoading, removeLoading } = useLoading();
+    domReady().then(appendLoading);
+    window.onmessage = (ev) => {
+      ev.data.payload === "removeLoading" && removeLoading();
+    };
+    setTimeout(removeLoading, 4999);
+  }
+});
+export default require_preload();

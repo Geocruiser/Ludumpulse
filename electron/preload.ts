@@ -28,13 +28,24 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 })
 
 // --------- News Scraping API ---------
+console.log('Preload script: Setting up newsScraper API...')
+
 contextBridge.exposeInMainWorld('newsScraper', {
   scrapeGameNews: (gameTitle: string) => {
+    console.log('newsScraper.scrapeGameNews called with:', gameTitle)
     return ipcRenderer.invoke('scrape-game-news', gameTitle)
   },
   dispose: () => {
+    console.log('newsScraper.dispose called')
     return ipcRenderer.invoke('dispose-news-scraper')
   }
+})
+
+console.log('Preload script: newsScraper API setup complete')
+
+// Test if API is available after page load
+window.addEventListener('DOMContentLoaded', () => {
+  console.log('Preload script: Testing newsScraper availability:', typeof (window as any).newsScraper)
 })
 
 // --------- Preload scripts loading ---------
@@ -114,7 +125,7 @@ function useLoading() {
   oStyle.id = 'app-loading-style'
   oStyle.innerHTML = styleContent
   oDiv.className = 'app-loading-wrap'
-  oDiv.innerHTML = `<div class="${className}"><div></div></div>`
+  oDiv.innerHTML = '<div class="' + className + '"><div></div></div>'
 
   return {
     appendLoading() {

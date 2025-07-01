@@ -6,8 +6,12 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { newsService, NewsJobStatus } from '@/lib/news/news-service'
-import { NewsItem } from '@/types/news'
+import { 
+  scrapeGameNews, 
+  fetchGeneralGamingNews, 
+  searchNews
+} from '@/lib/news/news-service'
+import { NewsJobStatus } from '@/types/news'
 import { useToast } from './use-toast'
 
 /**
@@ -18,23 +22,25 @@ export function useScrapeGameNews() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ gameId, gameTitle }: { gameId: string; gameTitle: string }) => {
-      return await newsService.scrapeGameNews(gameId, gameTitle)
+    mutationFn: async ({ gameTitle }: { gameTitle: string }) => {
+      return await scrapeGameNews(gameTitle)
     },
-    onSuccess: (jobStatus: NewsJobStatus, { gameId, gameTitle }) => {
-      if (jobStatus.status === 'completed') {
+    onSuccess: (result, { gameTitle }) => {
+      const totalArticles = result.articles?.length || 0
+      
+      if (result.success && totalArticles > 0) {
         toast({
           title: 'News Scraping Complete',
-          description: `Successfully scraped news for ${gameTitle}`,
+          description: `Found ${totalArticles} articles for ${gameTitle}`,
         })
         
         // Invalidate related queries to refresh data
-        queryClient.invalidateQueries({ queryKey: ['news', gameId] })
         queryClient.invalidateQueries({ queryKey: ['news', 'recent'] })
-      } else if (jobStatus.status === 'failed') {
+        queryClient.invalidateQueries({ queryKey: ['news', 'search'] })
+      } else {
         toast({
-          title: 'News Scraping Failed',
-          description: `Failed to scrape news for ${gameTitle}`,
+          title: 'No News Found',
+          description: result.error || `No news articles found for ${gameTitle}`,
           variant: 'destructive',
         })
       }
@@ -43,7 +49,7 @@ export function useScrapeGameNews() {
       console.error('News scraping error:', error)
       toast({
         title: 'Error',
-        description: 'Failed to start news scraping',
+        description: 'Failed to scrape news: ' + error.message,
         variant: 'destructive',
       })
     },
@@ -53,26 +59,28 @@ export function useScrapeGameNews() {
 /**
  * Hook to fetch news for a specific game
  */
-export function useGameNews(gameId: string, limit = 50) {
+export function useGameNews(gameTitle: string, limit = 20) {
   return useQuery({
-    queryKey: ['news', gameId, limit],
+    queryKey: ['news', 'game', gameTitle, limit],
     queryFn: async () => {
-      return await newsService.getGameNews(gameId, limit)
+      const result = await scrapeGameNews(gameTitle)
+      return result.success ? result.articles.slice(0, limit) : []
     },
-    enabled: !!gameId,
+    enabled: !!gameTitle,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
   })
 }
 
 /**
- * Hook to fetch recent news across all games
+ * Hook to fetch recent gaming news
  */
 export function useRecentNews(limit = 50) {
   return useQuery({
     queryKey: ['news', 'recent', limit],
     queryFn: async () => {
-      return await newsService.getRecentNews(limit)
+      const result = await fetchGeneralGamingNews()
+      return result.success ? result.articles.slice(0, limit) : []
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
@@ -82,12 +90,13 @@ export function useRecentNews(limit = 50) {
 /**
  * Hook to search news items
  */
-export function useSearchNews(query: string, gameId?: string) {
+export function useSearchNews(query: string) {
   return useQuery({
-    queryKey: ['news', 'search', query, gameId],
+    queryKey: ['news', 'search', query],
     queryFn: async () => {
       if (!query.trim()) return []
-      return await newsService.searchNews(query, gameId)
+      const result = await searchNews(query)
+      return result.success ? result.articles : []
     },
     enabled: !!query.trim(),
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -103,22 +112,24 @@ export function useRefreshGameNews() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ gameId, gameTitle }: { gameId: string; gameTitle: string }) => {
+    mutationFn: async ({ gameTitle }: { gameTitle: string }) => {
       // First invalidate existing cache
-      await queryClient.invalidateQueries({ queryKey: ['news', gameId] })
+      await queryClient.invalidateQueries({ queryKey: ['news', 'game', gameTitle] })
       
       // Then scrape fresh news
-      return await newsService.scrapeGameNews(gameId, gameTitle)
+      return await scrapeGameNews(gameTitle)
     },
-    onSuccess: (jobStatus: NewsJobStatus, { gameId, gameTitle }) => {
-      if (jobStatus.status === 'completed') {
+    onSuccess: (result, { gameTitle }) => {
+      const totalArticles = result.articles?.length || 0
+      
+      if (result.success && totalArticles > 0) {
         toast({
           title: 'News Refreshed',
-          description: `Updated news for ${gameTitle}`,
+          description: `Found ${totalArticles} new articles for ${gameTitle}`,
         })
         
         // Refresh the cache with new data
-        queryClient.invalidateQueries({ queryKey: ['news', gameId] })
+        queryClient.invalidateQueries({ queryKey: ['news', 'game', gameTitle] })
         queryClient.invalidateQueries({ queryKey: ['news', 'recent'] })
       }
     },
@@ -126,26 +137,14 @@ export function useRefreshGameNews() {
       console.error('News refresh error:', error)
       toast({
         title: 'Refresh Failed',
-        description: 'Failed to refresh news',
+        description: 'Failed to refresh news: ' + error.message,
         variant: 'destructive',
       })
     },
   })
 }
 
-/**
- * Custom hook to manage news service lifecycle
- */
-export function useNewsManager() {
-  return {
-    /**
-     * Dispose of the news service resources
-     */
-    dispose: async () => {
-      await newsService.dispose()
-    }
-  }
-}
+
 
 /**
  * Hook to preload news data for better UX
@@ -161,7 +160,8 @@ export function usePreloadNews() {
       queryClient.prefetchQuery({
         queryKey: ['news', 'recent', 50],
         queryFn: async () => {
-          return await newsService.getRecentNews(50)
+          const result = await fetchGeneralGamingNews()
+          return result.success ? result.articles.slice(0, 50) : []
         },
         staleTime: 2 * 60 * 1000,
       })
@@ -170,14 +170,15 @@ export function usePreloadNews() {
     /**
      * Preload news for a specific game
      */
-    preloadGameNews: (gameId: string) => {
+    preloadGameNews: (gameTitle: string) => {
       queryClient.prefetchQuery({
-        queryKey: ['news', gameId, 50],
+        queryKey: ['news', 'game', gameTitle, 20],
         queryFn: async () => {
-          return await newsService.getGameNews(gameId, 50)
+          const result = await scrapeGameNews(gameTitle)
+          return result.success ? result.articles.slice(0, 20) : []
         },
         staleTime: 5 * 60 * 1000,
       })
-    }
+    },
   }
 } 

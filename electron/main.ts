@@ -49,7 +49,7 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 let win: BrowserWindow | null = null
 // Here, you can also use other preload
 const preload = path.join(__dirname, 'preload.cjs')
-const url = process.env.VITE_DEV_SERVER_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null)
+const url = process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000'
 const indexHtml = path.join(process.env.DIST, 'index.html')
 
 /**
@@ -85,9 +85,18 @@ async function createWindow() {
     }
   })
 
+  console.log('Loading Electron app:', {
+    url,
+    VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL,
+    NODE_ENV: process.env.NODE_ENV,
+    indexHtml
+  })
+
   if (url) { // electron-vite-vue#298
+    console.log('Loading from URL:', url)
     win.loadURL(url)
   } else {
+    console.log('Loading from file:', indexHtml)
     win.loadFile(indexHtml)
   }
 
@@ -101,6 +110,64 @@ async function createWindow() {
   // update(win)
 }
 
+// News sources configuration
+const NEWS_SOURCES = [
+  {
+    id: 'ign',
+    name: 'IGN',
+    baseUrl: 'https://www.ign.com',
+    maxArticles: 10,
+    selectors: {
+      articleContainer: '.article-item, .jsx-article-item, .item',
+      title: '.item-title a, .headline a, h3 a, .title a',
+      link: '.item-title a, .headline a, h3 a, .title a',
+      date: '.publish-date, .article-timestamp, time, .date',
+      summary: '.item-summary, .article-summary, .excerpt, .summary',
+      sourceName: 'IGN'
+    },
+    buildSearchUrl: (gameTitle: string) => {
+      const encodedTitle = encodeURIComponent(gameTitle)
+      return `https://www.ign.com/search?q=${encodedTitle}`
+    }
+  },
+  {
+    id: 'gamespot',
+    name: 'GameSpot',
+    baseUrl: 'https://www.gamespot.com',
+    maxArticles: 10,
+    selectors: {
+      articleContainer: '.media-article, .news-river-article, .card',
+      title: '.media-title a, .news-river-title a, h3 a, .card-title a',
+      link: '.media-title a, .news-river-title a, h3 a, .card-title a',
+      date: '.media-date, .news-river-date, .publish-date, .date',
+      summary: '.media-summary, .news-river-summary, .article-summary, .summary',
+      sourceName: 'GameSpot'
+    },
+    buildSearchUrl: (gameTitle: string) => {
+      const encodedTitle = encodeURIComponent(gameTitle)
+      return `https://www.gamespot.com/search/?q=${encodedTitle}`
+    }
+  },
+  {
+    id: 'polygon',
+    name: 'Polygon',
+    baseUrl: 'https://www.polygon.com',
+    maxArticles: 10,
+    selectors: {
+      articleContainer: '.c-entry-box, .c-compact-river__entry, article',
+      title: '.c-entry-box--compact__title a, .c-entry-box__title a, h2 a',
+      link: '.c-entry-box--compact__title a, .c-entry-box__title a, h2 a',
+      date: '.c-byline__item time, .c-entry-box__meta time, time',
+      summary: '.c-entry-box__dek, .c-entry-summary, .summary',
+      sourceName: 'Polygon'
+    },
+    buildSearchUrl: (gameTitle: string) => {
+      const encodedTitle = encodeURIComponent(gameTitle)
+      return `https://www.polygon.com/search?q=${encodedTitle}`
+    }
+  }
+]
+
 // Initialize news scraper lazily
 async function getNewsScraper() {
   if (!newsScraperMain) {
@@ -108,7 +175,7 @@ async function getNewsScraper() {
       // Use require to load puppeteer in CommonJS context
       const puppeteer = require('puppeteer')
       
-      // Simple news scraper implementation
+      // Full news scraper implementation
       newsScraperMain = {
         browser: null,
         
@@ -116,35 +183,186 @@ async function getNewsScraper() {
           if (!this.browser) {
             this.browser = await puppeteer.launch({
               headless: true,
-              args: ['--no-sandbox', '--disable-setuid-sandbox']
+              args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+              ]
             })
+            console.log('News scraper browser initialized')
           }
         },
         
         async scrapeGameNews(gameTitle: string) {
           await this.initialize()
+          console.log(`Starting news scraping for: ${gameTitle}`)
           
-          // For now, return mock data to avoid complex scraping logic
-          // This can be expanded later once the ES module issues are resolved
-          return [{
-            sourceId: 'mock',
-            success: true,
-            articles: [{
-              title: `Sample news for ${gameTitle}`,
-              url: 'https://example.com',
-              publishedAt: new Date().toISOString(),
-              summary: `This is a sample news article about ${gameTitle}.`,
-              source: 'Mock Source'
-            }],
-            scrapedAt: new Date().toISOString(),
-            processingTime: 100
-          }]
+          const results = []
+          
+          for (const source of NEWS_SOURCES) {
+            try {
+              const result = await this.scrapeFromSource(source, gameTitle)
+              results.push(result)
+              
+              // Add delay between sources to be respectful
+              await this.delay(2000)
+            } catch (error) {
+              console.error(`Error scraping from ${source.name}:`, error)
+              results.push({
+                sourceId: source.id,
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                articles: [],
+                scrapedAt: new Date().toISOString()
+              })
+            }
+          }
+          
+          return results
+        },
+        
+        async scrapeFromSource(source: any, gameTitle: string) {
+          const startTime = Date.now()
+          let page = null
+
+          try {
+            page = await this.browser.newPage()
+            
+            // Set user agent and viewport
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+            await page.setViewport({ width: 1920, height: 1080 })
+
+            // Build search URL
+            const searchUrl = source.buildSearchUrl(gameTitle)
+            console.log(`Scraping ${source.name}: ${searchUrl}`)
+            
+            // Navigate to the search page
+            await page.goto(searchUrl, { 
+              waitUntil: 'networkidle2',
+              timeout: 30000 
+            })
+
+            // Wait a bit for dynamic content
+            await page.waitForTimeout(3000)
+
+            // Extract articles
+            const articles = await page.evaluate((selectors: any) => {
+              const articleElements = document.querySelectorAll(selectors.articleContainer)
+              const extractedArticles = []
+
+              for (let i = 0; i < Math.min(articleElements.length, 10); i++) {
+                const element = articleElements[i]
+                try {
+                  const titleElement = element.querySelector(selectors.title)
+                  const linkElement = element.querySelector(selectors.link)
+                  const dateElement = element.querySelector(selectors.date)
+                  const summaryElement = element.querySelector(selectors.summary)
+
+                  if (titleElement && linkElement) {
+                    const title = titleElement.textContent?.trim()
+                    const url = linkElement.getAttribute('href')
+                    
+                    if (title && url && title.length > 10) {
+                      extractedArticles.push({
+                        title: title,
+                        url: url,
+                        publishedAt: dateElement?.textContent?.trim() || dateElement?.getAttribute('datetime') || null,
+                        summary: summaryElement?.textContent?.trim() || null,
+                        source: selectors.sourceName
+                      })
+                    }
+                  }
+                } catch (error) {
+                  console.warn('Error extracting article:', error)
+                }
+              }
+
+              return extractedArticles
+            }, source.selectors)
+
+            // Process and clean the articles
+            const processedArticles = articles
+              .filter((article: any) => article.title && article.url)
+              .map((article: any) => ({
+                ...article,
+                url: this.resolveUrl(article.url, source.baseUrl),
+                publishedAt: this.parseDate(article.publishedAt),
+              }))
+              .slice(0, source.maxArticles)
+
+            console.log(`Found ${processedArticles.length} articles from ${source.name}`)
+
+            return {
+              sourceId: source.id,
+              success: true,
+              articles: processedArticles,
+              scrapedAt: new Date().toISOString(),
+              processingTime: Date.now() - startTime
+            }
+
+          } catch (error) {
+            console.error(`Error scraping from ${source.name}:`, error)
+            return {
+              sourceId: source.id,
+              success: false,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              articles: [],
+              scrapedAt: new Date().toISOString(),
+              processingTime: Date.now() - startTime
+            }
+          } finally {
+            if (page) {
+              await page.close()
+            }
+          }
+        },
+        
+        resolveUrl(url: string, baseUrl: string) {
+          if (url.startsWith('http')) return url
+          if (url.startsWith('//')) return `https:${url}`
+          if (url.startsWith('/')) return `${baseUrl}${url}`
+          return `${baseUrl}/${url}`
+        },
+        
+        parseDate(dateString: string | null) {
+          if (!dateString) return null
+          
+          try {
+            const date = new Date(dateString)
+            if (isNaN(date.getTime())) {
+              // Handle relative dates like "2 hours ago"
+              const now = new Date()
+              if (dateString.includes('hour')) {
+                const hours = parseInt(dateString.match(/\d+/)?.[0] || '0')
+                now.setHours(now.getHours() - hours)
+                return now.toISOString()
+              }
+              if (dateString.includes('day')) {
+                const days = parseInt(dateString.match(/\d+/)?.[0] || '0')
+                now.setDate(now.getDate() - days)
+                return now.toISOString()
+              }
+              return null
+            }
+            return date.toISOString()
+          } catch {
+            return null
+          }
+        },
+        
+        delay(ms: number) {
+          return new Promise(resolve => setTimeout(resolve, ms))
         },
         
         async dispose() {
           if (this.browser) {
             await this.browser.close()
             this.browser = null
+            console.log('News scraper browser disposed')
           }
         }
       }
