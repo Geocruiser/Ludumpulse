@@ -9,7 +9,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { 
   scrapeGameNews, 
   fetchGeneralGamingNews, 
-  searchNews
+  searchNews,
+  fetchTrackedGamesNews
 } from '@/lib/news/news-service'
 import { NewsJobStatus } from '@/types/news'
 import { useToast } from './use-toast'
@@ -37,6 +38,7 @@ export function useScrapeGameNews() {
         // Invalidate related queries to refresh data
         queryClient.invalidateQueries({ queryKey: ['news', 'recent'] })
         queryClient.invalidateQueries({ queryKey: ['news', 'search'] })
+        queryClient.invalidateQueries({ queryKey: ['news', 'tracked-games'] })
       } else {
         toast({
           title: 'No News Found',
@@ -105,6 +107,23 @@ export function useSearchNews(query: string) {
 }
 
 /**
+ * Hook to fetch news for tracked games only
+ */
+export function useTrackedGamesNews(gameList: Array<{ id: string, title: string }> = []) {
+  return useQuery({
+    queryKey: ['news', 'tracked-games', gameList.map(g => g.id).sort()],
+    queryFn: async () => {
+      if (!gameList.length) return []
+      const result = await fetchTrackedGamesNews(gameList)
+      return result.success ? result.articles : []
+    },
+    enabled: gameList.length > 0,
+    staleTime: 3 * 60 * 1000, // 3 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+  })
+}
+
+/**
  * Hook to manually refresh news for a game
  */
 export function useRefreshGameNews() {
@@ -131,6 +150,7 @@ export function useRefreshGameNews() {
         // Refresh the cache with new data
         queryClient.invalidateQueries({ queryKey: ['news', 'game', gameTitle] })
         queryClient.invalidateQueries({ queryKey: ['news', 'recent'] })
+        queryClient.invalidateQueries({ queryKey: ['news', 'tracked-games'] })
       }
     },
     onError: (error: Error) => {

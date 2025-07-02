@@ -62,10 +62,15 @@
 - [ ] Add error handling and retry mechanisms
 - [ ] Create news deduplication system
 
-#### 3.2 LangGraph AI Workflows
-- [ ] Set up LangGraph with Claude/OpenAI integration
-- [ ] Create news summarization workflow
-- [ ] Implement sentiment analysis for news items
+#### 3.2 AI News Summarization (COMPLETED)
+- [x] Set up AI summary service with OpenAI integration
+- [x] Create game news summarization workflow for last 3 days
+- [x] Implement sentiment analysis for news items
+- [x] Build rule-based fallback for when AI API is unavailable
+- [x] Add key topic extraction from news articles
+- [x] Create GameSummaries UI component with sentiment indicators
+- [x] Integrate AI summaries into tracked games dashboard
+- [x] Add manual refresh functionality for summaries
 - [ ] Build game recommendation engine
 - [ ] Add notification classification system
 
@@ -194,7 +199,9 @@
 ### Technical Metrics
 - Application startup time < 3 seconds
 - News scraping accuracy > 95%
-- AI summarization relevance score > 8/10
+- AI summarization relevance score > 8/10 (with fallback for offline mode)
+- Sentiment analysis accuracy > 85%
+- AI summary generation time < 5 seconds per game
 - Zero critical security vulnerabilities
 - 99.9% uptime for core functionality
 

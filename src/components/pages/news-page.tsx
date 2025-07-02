@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { RefreshCw, Search, Filter, Newspaper, Calendar, ExternalLink } from 'lucide-react'
-import { useRecentNews, useSearchNews, useScrapeGameNews } from '@/hooks/use-news'
+import { useRecentNews, useSearchNews, useScrapeGameNews, useTrackedGamesNews } from '@/hooks/use-news'
 import { useTrackedGames } from '@/hooks/use-games'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -25,13 +25,15 @@ export function NewsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Hooks
-  const { data: recentNews, isLoading: isLoadingNews, refetch: refetchNews } = useRecentNews(50)
-  const { data: searchResults, isLoading: isSearching } = useSearchNews(searchQuery)
   const { data: games } = useTrackedGames()
+  const { data: trackedGamesNews, isLoading: isLoadingTrackedNews, refetch: refetchTrackedNews } = useTrackedGamesNews(games || [])
+  const { data: searchResults, isLoading: isSearching } = useSearchNews(searchQuery)
   const scrapeGameNews = useScrapeGameNews()
 
   // Determine which news to display
-  const displayedNews: ScrapedArticle[] = searchQuery.trim() ? (searchResults || []) : (recentNews || [])
+  const displayedNews: ScrapedArticle[] = searchQuery.trim() 
+    ? (searchResults || []) 
+    : (trackedGamesNews || [])
 
   /**
    * Handle manual news refresh
@@ -39,7 +41,7 @@ export function NewsPage() {
   async function handleRefreshNews() {
     setIsRefreshing(true)
     try {
-      await refetchNews()
+      await refetchTrackedNews()
     } finally {
       setIsRefreshing(false)
     }
@@ -87,9 +89,14 @@ export function NewsPage() {
         <div className="flex items-center space-x-3">
           <Newspaper className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-3xl font-bold">Game News</h1>
+            <h1 className="text-3xl font-bold">Your Game News</h1>
             <p className="text-muted-foreground">
-              Latest gaming news from across the web
+              Updates, patches & news for your tracked games (prioritizing game updates)
+              {games?.length ? (
+                <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                  {games.length} game{games.length === 1 ? '' : 's'} tracked
+                </span>
+              ) : null}
             </p>
           </div>
         </div>
@@ -106,11 +113,11 @@ export function NewsPage() {
           </Button>
           <Button
             onClick={handleScrapeAllNews}
-            disabled={isRefreshing || scrapeGameNews.isPending}
+            disabled={isRefreshing || scrapeGameNews.isPending || !games?.length}
             size="sm"
           >
             <Filter className="h-4 w-4 mr-2" />
-            Scrape All News
+            Update Game News
           </Button>
         </div>
       </div>
@@ -151,24 +158,31 @@ export function NewsPage() {
 
       {/* News Grid */}
       <div className="space-y-4">
-        {(isLoadingNews || isSearching) && (
+        {(isLoadingTrackedNews || isSearching) && (
           <div className="flex items-center justify-center py-12">
             <LoadingSpinner size="lg" />
           </div>
         )}
 
-        {!isLoadingNews && !isSearching && displayedNews?.length === 0 && (
+        {!isLoadingTrackedNews && !isSearching && displayedNews?.length === 0 && (
           <Card>
             <CardContent className="pt-6">
               <div className="text-center py-12">
                 <Newspaper className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No news found</h3>
+                <h3 className="text-lg font-semibold mb-2">No specific news found</h3>
                 <p className="text-muted-foreground">
                   {searchQuery.trim() 
                     ? 'Try adjusting your search terms' 
-                    : 'Start by scraping news for your tracked games'
+                    : games?.length 
+                      ? 'No breaking news found for your tracked games. Guides and reviews are filtered out. Try "Update Game News" for fresh articles.' 
+                      : 'Add some games to your tracking list to see news that specifically mentions them!'
                   }
                 </p>
+                {!searchQuery.trim() && games?.length === 0 && (
+                  <Button className="mt-4" onClick={() => window.location.href = '/games'}>
+                    Track Some Games
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -207,6 +221,26 @@ function NewsCard({ newsItem }: { newsItem: ScrapedArticle }) {
                 <Calendar className="h-3 w-3" />
                 <span>{formatNewsDate(newsItem.publishedAt)}</span>
               </div>
+              {newsItem.matchedGame && (
+                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
+                  {newsItem.matchedGame}
+                </Badge>
+              )}
+              {newsItem.relevanceScore && newsItem.relevanceScore > 400 && (
+                <Badge variant="default" className="bg-purple-100 text-purple-800 border-purple-200">
+                  Game Update
+                </Badge>
+              )}
+              {newsItem.relevanceScore && newsItem.relevanceScore > 250 && newsItem.relevanceScore <= 400 && (
+                <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                  Direct Match
+                </Badge>
+              )}
+              {newsItem.relevanceScore && newsItem.relevanceScore > 100 && newsItem.relevanceScore <= 250 && (
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  Good Match
+                </Badge>
+              )}
             </div>
           </div>
           

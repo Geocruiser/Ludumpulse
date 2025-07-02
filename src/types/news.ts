@@ -53,6 +53,8 @@ export interface ScrapedArticle {
   publishedAt: string | null
   summary: string | null
   source: string
+  matchedGame?: string
+  relevanceScore?: number
 }
 
 export interface NewsFilter {
