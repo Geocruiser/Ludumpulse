@@ -17,7 +17,6 @@ export interface TrackedGame {
   title: string
   tags: string[]
   release_status: 'RELEASED' | 'UNRELEASED'
-  release_date: string | null
   created_at: string
   updated_at: string
 }
@@ -26,7 +25,6 @@ export interface CreateGameData {
   title: string
   tags: string[]
   releaseStatus: 'RELEASED' | 'UNRELEASED'
-  releaseDate: string | null
 }
 
 export interface UpdateGameData extends Partial<CreateGameData> {
@@ -68,7 +66,6 @@ export function useTrackedGames(filters?: GameFilters, sort?: GameSortConfig) {
         // Map frontend field names to database column names
         const columnMapping = {
           'title': 'title',
-          'releaseDate': 'release_date',
           'createdAt': 'created_at'
         }
         const dbColumn = columnMapping[sort.field] || sort.field
@@ -129,7 +126,6 @@ export function useCreateGame() {
           title: gameData.title,
           tags: gameData.tags,
           release_status: gameData.releaseStatus,
-          release_date: gameData.releaseDate,
         })
         .select()
         .single()
@@ -175,7 +171,6 @@ export function useUpdateGame() {
           title: gameData.title,
           tags: gameData.tags,
           release_status: gameData.releaseStatus,
-          release_date: gameData.releaseDate,
         })
         .eq('id', gameData.id)
         .eq('user_id', user.id)

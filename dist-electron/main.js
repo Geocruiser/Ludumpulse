@@ -281,7 +281,7 @@ async function getNewsScraper() {
   }
   return newsScraperMain;
 }
-ipcMain.handle("scrape-game-news", async (event, gameTitle) => {
+ipcMain.handle("scrape-game-news", async (_event, gameTitle) => {
   try {
     const scraper = await getNewsScraper();
     const results = await scraper.scrapeGameNews(gameTitle);

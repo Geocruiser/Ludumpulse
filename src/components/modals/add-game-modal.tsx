@@ -28,7 +28,6 @@ const gameSchema = z.object({
   releaseStatus: z.enum(['RELEASED', 'UNRELEASED'], {
     required_error: 'Please select a release status',
   }),
-  releaseDate: z.string().optional(),
   tags: z.array(z.string()).optional(),
 })
 
@@ -47,7 +46,6 @@ export function AddGameModal() {
     register,
     handleSubmit,
     setValue,
-    watch,
     reset,
     formState: { errors, isValid },
   } = useForm<GameFormData>({
@@ -55,14 +53,11 @@ export function AddGameModal() {
     mode: 'onChange',
   })
 
-  const releaseStatus = watch('releaseStatus')
-
   const onSubmit = async (data: GameFormData) => {
     try {
       await createGame.mutateAsync({
         title: data.title,
         releaseStatus: data.releaseStatus,
-        releaseDate: data.releaseDate || null,
         tags: tags,
       })
       
@@ -143,25 +138,6 @@ export function AddGameModal() {
             </Select>
             {errors.releaseStatus && (
               <p className="text-sm text-destructive">{errors.releaseStatus.message}</p>
-            )}
-          </div>
-
-          {/* Release Date (optional) */}
-          <div className="space-y-2">
-            <Label htmlFor="releaseDate">
-              Release Date 
-              {releaseStatus === 'UNRELEASED' && (
-                <span className="text-muted-foreground ml-1">(expected)</span>
-              )}
-            </Label>
-            <Input
-              id="releaseDate"
-              type="date"
-              {...register('releaseDate')}
-              className={errors.releaseDate ? 'border-destructive' : ''}
-            />
-            {errors.releaseDate && (
-              <p className="text-sm text-destructive">{errors.releaseDate.message}</p>
             )}
           </div>
 

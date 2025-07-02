@@ -30,7 +30,6 @@ import {
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useGameStore } from '@/lib/stores/game-store'
 import { useTrackedGames, useDeleteGame } from '@/hooks/use-games'
-import { format } from 'date-fns'
 
 /**
  * Main tracked games page with list, filtering, and management
@@ -61,7 +60,7 @@ export function TrackedGamesPage() {
   const handleSortChange = (value: string) => {
     const [field, direction] = value.split('-')
     setSortConfig({
-      field: field as 'title' | 'releaseDate' | 'createdAt',
+      field: field as 'title' | 'createdAt',
       direction: direction as 'asc' | 'desc'
     })
   }
@@ -146,8 +145,6 @@ export function TrackedGamesPage() {
               <SelectContent>
                 <SelectItem value="title-asc">Title A-Z</SelectItem>
                 <SelectItem value="title-desc">Title Z-A</SelectItem>
-                <SelectItem value="releaseDate-desc">Release Date (Newest)</SelectItem>
-                <SelectItem value="releaseDate-asc">Release Date (Oldest)</SelectItem>
                 <SelectItem value="createdAt-desc">Recently Added</SelectItem>
                 <SelectItem value="createdAt-asc">Oldest Added</SelectItem>
               </SelectContent>
@@ -207,11 +204,6 @@ export function TrackedGamesPage() {
                         >
                           {game.release_status === 'RELEASED' ? 'Released' : 'Unreleased'}
                         </Badge>
-                        {game.release_date && (
-                          <span className="text-sm text-muted-foreground">
-                            {format(new Date(game.release_date), 'MMM yyyy')}
-                          </span>
-                        )}
                       </div>
                     </div>
                     <DropdownMenu>

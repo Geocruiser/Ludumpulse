@@ -31,7 +31,6 @@ model TrackedGame {
   title         String
   tags          String[]
   releaseStatus ReleaseStatus @map("release_status")
-  releaseDate   DateTime?    @map("release_date")
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
   

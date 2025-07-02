@@ -375,7 +375,7 @@ async function getNewsScraper() {
 }
 
 // Set up IPC handlers for news scraping
-ipcMain.handle('scrape-game-news', async (event, gameTitle: string) => {
+ipcMain.handle('scrape-game-news', async (_event, gameTitle: string) => {
   try {
     const scraper = await getNewsScraper()
     const results = await scraper.scrapeGameNews(gameTitle)

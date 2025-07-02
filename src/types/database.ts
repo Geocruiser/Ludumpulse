@@ -17,7 +17,6 @@ export interface TrackedGame {
   title: string
   tags: string[]
   release_status: 'RELEASED' | 'UNRELEASED'
-  release_date?: string
   created_at: string
   updated_at: string
 }

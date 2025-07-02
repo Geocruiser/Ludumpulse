@@ -102,7 +102,7 @@ function QuickActionCard({
  * Main dashboard page component
  */
 export function DashboardPage({ onNavigateTo }: DashboardPageProps) {
-  const { data: games, isLoading } = useTrackedGames()
+  const { data: games } = useTrackedGames()
   const { openAddGameModal } = useGameStore()
 
   const trackedGamesCount = games?.length || 0

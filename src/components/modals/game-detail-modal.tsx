@@ -11,7 +11,7 @@ import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Edit, Save, X, Tag, Calendar, Info, Newspaper } from 'lucide-react'
+import { Edit, Save, X, Tag, Info, Newspaper } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,6 @@ const gameSchema = z.object({
   releaseStatus: z.enum(['RELEASED', 'UNRELEASED'], {
     required_error: 'Please select a release status',
   }),
-  releaseDate: z.string().optional(),
   tags: z.array(z.string()).optional(),
 })
 
@@ -53,7 +52,6 @@ export function GameDetailModal() {
     register,
     handleSubmit,
     setValue,
-    watch,
     reset,
     formState: { errors, isValid },
   } = useForm<GameFormData>({
@@ -61,15 +59,12 @@ export function GameDetailModal() {
     mode: 'onChange',
   })
 
-  const releaseStatus = watch('releaseStatus')
-
   // Reset form when game data changes
   useEffect(() => {
     if (game) {
       reset({
         title: game.title,
         releaseStatus: game.release_status,
-        releaseDate: game.release_date || '',
       })
       setTags(game.tags || [])
     }
@@ -83,7 +78,6 @@ export function GameDetailModal() {
         id: selectedGameId,
         title: data.title,
         releaseStatus: data.releaseStatus,
-        releaseDate: data.releaseDate || null,
         tags: tags,
       })
       
@@ -123,7 +117,6 @@ export function GameDetailModal() {
       reset({
         title: game.title,
         releaseStatus: game.release_status,
-        releaseDate: game.release_date || '',
       })
       setTags(game.tags || [])
     }
@@ -201,7 +194,6 @@ export function GameDetailModal() {
                 <div className="space-y-2">
                   <Label htmlFor="releaseStatus">Release Status</Label>
                   <Select
-                    value={releaseStatus}
                     onValueChange={(value) => setValue('releaseStatus', value as 'RELEASED' | 'UNRELEASED')}
                   >
                     <SelectTrigger className={errors.releaseStatus ? 'border-destructive' : ''}>
@@ -215,22 +207,6 @@ export function GameDetailModal() {
                   {errors.releaseStatus && (
                     <p className="text-sm text-destructive">{errors.releaseStatus.message}</p>
                   )}
-                </div>
-
-                {/* Release Date */}
-                <div className="space-y-2">
-                  <Label htmlFor="releaseDate">
-                    Release Date 
-                    {releaseStatus === 'UNRELEASED' && (
-                      <span className="text-muted-foreground ml-1">(expected)</span>
-                    )}
-                  </Label>
-                  <Input
-                    id="releaseDate"
-                    type="date"
-                    {...register('releaseDate')}
-                    className={errors.releaseDate ? 'border-destructive' : ''}
-                  />
                 </div>
 
                 {/* Tags */}
@@ -332,12 +308,6 @@ export function GameDetailModal() {
                     >
                       {game.release_status === 'RELEASED' ? 'Released' : 'Unreleased'}
                     </Badge>
-                    {game.release_date && (
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        <span>{format(new Date(game.release_date), 'MMMM d, yyyy')}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
 

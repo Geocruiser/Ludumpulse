@@ -15,7 +15,6 @@ import {
   TrendingUp, 
   TrendingDown, 
   Minus, 
-  Shuffle,
   Sparkles,
   Clock,
   ExternalLink
@@ -57,43 +56,39 @@ interface GameSummariesProps {
  * Individual game summary card component
  */
 function GameSummaryCard({ summary }: { summary: GameNewsSummary }) {
-  const getSentimentIcon = (sentiment: string) => {
+  const getSentimentIcon = (sentiment?: string) => {
     switch (sentiment) {
       case 'positive':
         return <TrendingUp className="h-4 w-4 text-green-500" />
       case 'negative':
         return <TrendingDown className="h-4 w-4 text-red-500" />
-      case 'mixed':
-        return <Shuffle className="h-4 w-4 text-yellow-500" />
       default:
         return <Minus className="h-4 w-4 text-gray-500" />
     }
   }
 
-  const getSentimentColor = (sentiment: string) => {
+  const getSentimentColor = (sentiment?: string) => {
     switch (sentiment) {
       case 'positive':
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
       case 'negative':
         return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      case 'mixed':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
     }
   }
 
   return (
-    <Card className="h-full">
+    <Card className="relative">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <CardTitle className="text-lg font-semibold truncate">
             {summary.gameTitle}
           </CardTitle>
           <div className="flex items-center gap-2">
             {getSentimentIcon(summary.sentiment)}
             <Badge className={getSentimentColor(summary.sentiment)}>
-              {summary.sentiment}
+              {summary.sentiment || 'neutral'}
             </Badge>
           </div>
         </div>
@@ -103,10 +98,12 @@ function GameSummaryCard({ summary }: { summary: GameNewsSummary }) {
             <Calendar className="h-4 w-4" />
             <span>{summary.articlesCount} articles</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Clock className="h-4 w-4" />
-            <span>{formatDistanceToNow(new Date(summary.lastUpdated))} ago</span>
-          </div>
+          {summary.lastUpdated && (
+            <div className="flex items-center gap-1">
+              <Clock className="h-4 w-4" />
+              <span>{formatDistanceToNow(new Date(summary.lastUpdated))} ago</span>
+            </div>
+          )}
         </div>
       </CardHeader>
       

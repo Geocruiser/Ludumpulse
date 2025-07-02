@@ -7,7 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { scrapeGameNews } from '@/lib/news/news-service'
-import { generateBatchGameSummaries, GameNewsSummary } from '@/lib/news/ai-summary-service'
+import { generateBatchGameSummaries } from '@/lib/news/ai-summary-service'
 import { useToast } from './use-toast'
 import { TrackedGame } from './use-games'
 

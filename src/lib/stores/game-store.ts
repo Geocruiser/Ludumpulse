@@ -17,7 +17,7 @@ export interface GameFilters {
 }
 
 export interface GameSortConfig {
-  field: 'title' | 'releaseDate' | 'createdAt'
+  field: 'title' | 'createdAt'
   direction: 'asc' | 'desc'
 }
 
