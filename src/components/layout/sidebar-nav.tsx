@@ -15,7 +15,8 @@ import {
   Newspaper, 
   Lightbulb, 
   Bell, 
-  Settings 
+  Settings,
+  Users 
 } from 'lucide-react'
 
 const navigationItems = [
@@ -40,6 +41,11 @@ const navigationItems = [
     icon: Lightbulb,
   },
   {
+    title: 'Friends',
+    href: '/friends',
+    icon: Users,
+  },
+  {
     title: 'Notifications',
     href: '/notifications',
     icon: Bell,
@@ -51,7 +57,7 @@ const navigationItems = [
   },
 ]
 
-type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'notifications' | 'settings'
+type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'friends' | 'notifications' | 'settings'
 
 interface SidebarNavProps {
   currentPage: PageType
@@ -68,6 +74,7 @@ export function SidebarNav({ currentPage, onPageChange }: SidebarNavProps) {
       case '/games': return 'games'
       case '/news': return 'news'
       case '/suggestions': return 'suggestions'
+      case '/friends': return 'friends'
       case '/notifications': return 'notifications'
       case '/settings': return 'settings'
       default: return 'dashboard'

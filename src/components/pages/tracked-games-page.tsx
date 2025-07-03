@@ -188,7 +188,7 @@ export function TrackedGamesPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, delay: index * 0.05 }}
             >
-              <Card className="cursor-pointer hover:shadow-md transition-shadow overflow-hidden">
+              <Card className="hover:shadow-md transition-shadow overflow-hidden flex flex-col">
                 <div className="flex">
                   {/* Cover Art */}
                   <div className="flex-shrink-0 w-24 h-32 relative">
@@ -209,58 +209,19 @@ export function TrackedGamesPage() {
                   </div>
 
                   {/* Game Content */}
-                  <div className="flex-1 flex flex-col">
-                    <CardHeader className="pb-2 flex-1">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <CardTitle 
-                            className="text-lg truncate cursor-pointer hover:text-primary"
-                            onClick={() => openGameDetail(game.id)}
-                          >
-                            {game.title}
-                          </CardTitle>
-                          
-                          {/* Game Metadata */}
-                          <div className="mt-2 space-y-1">
-                            {game.developer && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <User className="h-3 w-3" />
-                                <span className="truncate">{game.developer}</span>
-                              </div>
-                            )}
-                            
-                            {game.release_date && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Calendar className="h-3 w-3" />
-                                <span>{new Date(game.release_date).getFullYear()}</span>
-                              </div>
-                            )}
-                            
-                            {game.rating && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Star className="h-3 w-3" />
-                                <span>{game.rating}/100</span>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge 
-                              variant={game.release_status === 'RELEASED' ? 'default' : 'secondary'}
-                              className="text-xs"
-                            >
-                              {game.release_status === 'RELEASED' ? 'Released' : 'Unreleased'}
-                            </Badge>
-                            {game.igdb_id && (
-                              <Badge variant="outline" className="text-xs">
-                                IGDB
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
+                  <div className="flex-1 flex flex-col justify-between p-4 min-w-0">
+                    <div>
+                      <div className="flex justify-between items-start gap-2">
+                        <CardTitle 
+                          className="text-lg cursor-pointer hover:text-primary leading-tight flex-1 truncate"
+                          onClick={() => openGameDetail(game.id)}
+                          title={game.title}
+                        >
+                          {game.title}
+                        </CardTitle>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -277,45 +238,81 @@ export function TrackedGamesPage() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                    </CardHeader>
+
+                      {/* Game Metadata */}
+                      <div className="mt-2 space-y-1">
+                        {game.developer && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <User className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{game.developer}</span>
+                          </div>
+                        )}
+                        {game.release_date && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Calendar className="h-3 w-3 flex-shrink-0" />
+                            <span>{new Date(game.release_date).getFullYear()}</span>
+                          </div>
+                        )}
+                        {game.rating !== null && game.rating !== undefined && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Star className="h-3 w-3 flex-shrink-0" />
+                            <span>{Math.round(game.rating)}/100</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     
-                    {/* Tags and Genres */}
-                    {(game.tags.length > 0 || game.genres?.length > 0) && (
-                      <CardContent className="pt-0">
-                        <div className="flex flex-wrap gap-1">
-                          {/* Show IGDB genres first if available, otherwise show user tags */}
-                          {game.genres?.length > 0 ? (
-                            <>
-                              {game.genres.slice(0, 3).map((genre) => (
-                                <Badge key={genre} variant="outline" className="text-xs">
-                                  {genre}
-                                </Badge>
-                              ))}
-                              {game.genres.length > 3 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{game.genres.length - 3} more
-                                </Badge>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {game.tags.slice(0, 3).map((tag) => (
-                                <Badge key={tag} variant="outline" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
-                              {game.tags.length > 3 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{game.tags.length - 3} more
-                                </Badge>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </CardContent>
-                    )}
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge 
+                        variant={game.release_status === 'RELEASED' ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
+                        {game.release_status === 'RELEASED' ? 'Released' : 'Unreleased'}
+                      </Badge>
+                      {game.igdb_id && (
+                        <Badge variant="outline" className="text-xs">
+                          IGDB
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
+                
+                {/* Tags and Genres */}
+                {(game.tags.length > 0 || game.genres?.length > 0) && (
+                  <div className="p-4 pt-0">
+                    <div className="flex flex-wrap gap-1">
+                      {/* Show IGDB genres first if available, otherwise show user tags */}
+                      {game.genres?.length > 0 ? (
+                        <>
+                          {game.genres.slice(0, 3).map((genre) => (
+                            <Badge key={genre} variant="outline" className="text-xs">
+                              {genre}
+                            </Badge>
+                          ))}
+                          {game.genres.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{game.genres.length - 3} more
+                            </Badge>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {game.tags.slice(0, 3).map((tag) => (
+                            <Badge key={tag} variant="outline" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                          {game.tags.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{game.tags.length - 3} more
+                            </Badge>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </Card>
             </motion.div>
           ))}

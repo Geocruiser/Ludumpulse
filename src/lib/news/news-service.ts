@@ -11,6 +11,7 @@ import {
   getTrackedGames,
   cleanupOldNews 
 } from '../database'
+import { mockNewsData } from './mock-news'
 
 // NewsAPI configuration with fallback
 const NEWS_API_KEY = import.meta.env.VITE_NEWS_API_KEY || (() => {
@@ -132,12 +133,12 @@ export async function scrapeGameNews(gameTitle: string, saveToDb: boolean = true
           )
           
           if (matchingGame) {
-            await saveNewsArticles(matchingGame.id, relevantArticles.map(article => ({
+            await saveNewsArticles(relevantArticles.map(article => ({
               title: article.title,
               summary: article.summary,
               fullArticleUrl: article.url,
               publishedAt: article.publishedAt
-            })))
+            })), matchingGame.id)
             console.log(`Saved ${relevantArticles.length} articles to database for ${gameTitle}`)
           }
         }
@@ -154,12 +155,20 @@ export async function scrapeGameNews(gameTitle: string, saveToDb: boolean = true
       scrapedAt: new Date().toISOString()
     }
   } catch (error) {
-    console.error('Error fetching game news:', error)
+    console.error(`Error fetching game news for ${gameTitle}:`, error)
+    console.warn(`API fetch failed for ${gameTitle}. Returning mock news data as a fallback.`)
+
+    // Return a subset of mock data, customized for the game
+    const gameMockData = mockNewsData.slice(0, 2).map(article => ({
+      ...article,
+      title: `[Mock] ${gameTitle}: ${article.title}`,
+      source: 'Mock Data'
+    }))
+
     return {
-      sourceId: 'ai-news-api',
-      success: false,
-      articles: [],
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      sourceId: 'mock-news-fallback',
+      success: true,
+      articles: gameMockData,
       scrapedAt: new Date().toISOString()
     }
   }
@@ -199,20 +208,40 @@ export async function fetchGeneralGamingNews(): Promise<ScrapingResult> {
       const dateB = b.publishedAt ? new Date(b.publishedAt) : new Date(0)
       return dateB.getTime() - dateA.getTime()
     })
+
+    // Save general news to the database without a gameId
+    const articlesToSave = gamingArticles.map(article => ({
+      title: article.title,
+      summary: article.summary,
+      fullArticleUrl: article.url,
+      publishedAt: article.publishedAt
+    }))
+    const savedArticlesResult = await saveNewsArticles(articlesToSave)
+
+    let returnedArticles: ScrapedArticle[] = gamingArticles
+    if (savedArticlesResult.success && savedArticlesResult.data) {
+      // Create a map of URL to ID for quick lookup
+      const urlToIdMap = new Map(savedArticlesResult.data.map(item => [item.full_article_url, item.id]))
+      // Add the ID to the scraped articles
+      returnedArticles = gamingArticles.map(article => ({
+        ...article,
+        id: urlToIdMap.get(article.url || '')
+      }))
+    }
     
     return {
       sourceId: 'ai-news-api',
       success: true,
-      articles: gamingArticles.slice(0, 20),
+      articles: returnedArticles.slice(0, 20),
       scrapedAt: new Date().toISOString()
     }
   } catch (error) {
     console.error('Error fetching general gaming news:', error)
+    console.warn('API fetch failed. Returning mock news data as a fallback.')
     return {
-      sourceId: 'ai-news-api',
-      success: false,
-      articles: [],
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      sourceId: 'mock-news-fallback',
+      success: true,
+      articles: mockNewsData,
       scrapedAt: new Date().toISOString()
     }
   }

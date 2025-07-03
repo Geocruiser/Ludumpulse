@@ -15,8 +15,9 @@ import { NewsPage } from '@/components/pages/news-page'
 import { AddGameModal } from '@/components/modals/add-game-modal'
 import { GameDetailModal } from '@/components/modals/game-detail-modal'
 import { SuggestionsPage } from '@/components/pages/suggestions-page'
+import { FriendsPage } from '@/components/pages/friends-page'
 
-type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'notifications' | 'settings'
+type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'friends' | 'notifications' | 'settings'
 
 /**
  * Main application layout with top bar and sidebar navigation
@@ -32,6 +33,8 @@ export function MainLayout() {
         return <NewsPage />
       case 'suggestions':
         return <SuggestionsPage />
+      case 'friends':
+        return <FriendsPage />
       case 'dashboard':
       default:
         return <DashboardPage onNavigateTo={setCurrentPage} />

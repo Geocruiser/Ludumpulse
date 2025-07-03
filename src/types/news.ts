@@ -48,6 +48,7 @@ export interface ScrapingResult {
 }
 
 export interface ScrapedArticle {
+  id?: string
   title: string
   url: string
   publishedAt: string | null

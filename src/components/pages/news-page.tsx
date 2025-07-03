@@ -7,7 +7,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { RefreshCw, Search, Filter, Newspaper, Calendar, ExternalLink, Trash2 } from 'lucide-react'
+import { RefreshCw, Search, Filter, Newspaper, Calendar, ExternalLink, Trash2, Share2 } from 'lucide-react'
 import { useSearchNews, useTrackedGamesNews, useScrapeAllGamesNews, useCleanupOldNews } from '@/hooks/use-news'
 import { useTrackedGames } from '@/hooks/use-games'
 import { Input } from '@/components/ui/input'
@@ -18,11 +18,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ScrapedArticle } from '@/types/news'
 import { formatDistanceToNow } from 'date-fns'
+import { ShareNewsDialog } from '@/components/friends/share-news-dialog'
 
 export function NewsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedGameId, setSelectedGameId] = useState<string | undefined>()
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [selectedNewsItem, setSelectedNewsItem] = useState<ScrapedArticle | null>(null)
 
   // Hooks
   const { data: games } = useTrackedGames()
@@ -35,6 +38,11 @@ export function NewsPage() {
   const displayedNews: ScrapedArticle[] = searchQuery.trim() 
     ? (searchResults || []) 
     : (trackedGamesNews || [])
+
+  const handleShareClick = (newsItem: ScrapedArticle) => {
+    setSelectedNewsItem(newsItem)
+    setShareDialogOpen(true)
+  }
 
   /**
    * Handle manual news refresh
@@ -72,20 +80,18 @@ export function NewsPage() {
     // The hook will automatically show a toast and refresh the data
   }
 
-
-
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
-          <Newspaper className="h-8 w-8 text-primary" />
+          <Newspaper className="h-8 w-8 text-primary flex-shrink-0" />
           <div>
             <h1 className="text-3xl font-bold">Your Game News</h1>
             <p className="text-muted-foreground">
-              Updates, patches & news for your tracked games (prioritizing game updates)
+              Updates, patches & news for your tracked games
               {games?.length ? (
-                <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-1 rounded whitespace-nowrap">
                   {games.length} game{games.length === 1 ? '' : 's'} tracked
                 </span>
               ) : null}
@@ -197,10 +203,18 @@ export function NewsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
           >
-            <NewsCard newsItem={newsItem} />
+            <NewsCard newsItem={newsItem} onShare={handleShareClick} />
           </motion.div>
         ))}
       </div>
+
+      {selectedNewsItem && (
+        <ShareNewsDialog
+          isOpen={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          newsItem={selectedNewsItem}
+        />
+      )}
     </div>
   )
 }
@@ -208,7 +222,7 @@ export function NewsPage() {
 /**
  * Individual news item card component
  */
-function NewsCard({ newsItem }: { newsItem: ScrapedArticle }) {
+function NewsCard({ newsItem, onShare }: { newsItem: ScrapedArticle, onShare: (item: ScrapedArticle) => void }) {
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="space-y-3">
@@ -246,11 +260,16 @@ function NewsCard({ newsItem }: { newsItem: ScrapedArticle }) {
             </div>
           </div>
           
-          <Button variant="ghost" size="sm" asChild>
-            <a href={newsItem.url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          </Button>
+          <div className="flex items-center">
+            <Button variant="ghost" size="sm" onClick={() => onShare(newsItem)}>
+              <Share2 className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <a href={newsItem.url} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+          </div>
         </div>
       </CardHeader>
       

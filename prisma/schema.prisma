@@ -57,7 +57,7 @@ model TrackedGame {
 
 model NewsItem {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gameId         String   @map("game_id") @db.Uuid
+  gameId         String?   @map("game_id") @db.Uuid
   title          String
   summary        String?
   fullArticleUrl String?  @map("full_article_url")
@@ -65,7 +65,7 @@ model NewsItem {
   createdAt      DateTime @default(now()) @map("created_at")
   
   // Relationships
-  game TrackedGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game TrackedGame? @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   @@map("news_items")
 }

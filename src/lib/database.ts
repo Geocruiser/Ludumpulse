@@ -253,13 +253,13 @@ export async function markNotificationAsRead(id: string): Promise<ApiResponse<vo
  * Save news articles to the database for a specific game
  */
 export async function saveNewsArticles(
-  gameId: string, 
   articles: Array<{
     title: string
     summary?: string | null
     fullArticleUrl?: string
     publishedAt?: string | null
-  }>
+  }>,
+  gameId?: string, 
 ): Promise<ApiResponse<NewsItem[]>> {
   try {
     if (!articles.length) {
@@ -276,14 +276,19 @@ export async function saveNewsArticles(
     }))
 
     // Check for existing articles to avoid duplicates
-    const existingUrls = await supabase
+    let query = supabase
       .from('news_items')
       .select('full_article_url')
-      .eq('game_id', gameId)
-      .in('full_article_url', newsItems.map(item => item.full_article_url))
+      .in('full_article_url', newsItems.map(item => item.full_article_url).filter(Boolean) as string[])
+
+    if (gameId) {
+      query = query.eq('game_id', gameId)
+    }
+
+    const existingUrls = await query
 
     const existingUrlSet = new Set(
-      existingUrls.data?.map(item => item.full_article_url) || []
+      (existingUrls.data || []).map(item => item.full_article_url).filter(Boolean) as string[]
     )
 
     // Filter out duplicates
