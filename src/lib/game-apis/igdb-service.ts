@@ -310,12 +310,6 @@ export async function getTrendingGames(genres: string[] = [], limit: number = 50
       throw new Error('IGDB API not available in this environment')
     }
 
-    // Fallback: if the preload script doesn't expose getTrendingGames yet, fall back to popular games
-    if (typeof window.igdbApi.getTrendingGames !== 'function') {
-      console.warn('[IGDB] getTrendingGames not available – falling back to getPopularGames')
-      return await getPopularGames(limit)
-    }
-
     const response = await window.igdbApi.getTrendingGames(genres, limit)
     
     if (!response.success) {

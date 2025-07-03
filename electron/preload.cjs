@@ -56,6 +56,7 @@ try {
     searchGames: (q, limit) => ipcRenderer.invoke('igdb:search-games', q, limit),
     getGameById:       (id)    => ipcRenderer.invoke('igdb:get-game-by-id', id),
     getPopularGames:   (limit) => ipcRenderer.invoke('igdb:get-popular-games', limit),
+    getTrendingGames: (genres, limit) => ipcRenderer.invoke('igdb:get-trending-games', genres, limit),
     testConnection:           () => ipcRenderer.invoke('igdb:test-connection'),
     isConfigured:             () => ipcRenderer.invoke('igdb:is-configured')
   })
