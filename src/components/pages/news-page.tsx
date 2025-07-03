@@ -7,8 +7,8 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { RefreshCw, Search, Filter, Newspaper, Calendar, ExternalLink } from 'lucide-react'
-import { useRecentNews, useSearchNews, useScrapeGameNews, useTrackedGamesNews } from '@/hooks/use-news'
+import { RefreshCw, Search, Filter, Newspaper, Calendar, ExternalLink, Trash2 } from 'lucide-react'
+import { useSearchNews, useTrackedGamesNews, useScrapeAllGamesNews, useCleanupOldNews } from '@/hooks/use-news'
 import { useTrackedGames } from '@/hooks/use-games'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { NewsItem, ScrapedArticle } from '@/types/news'
+import { ScrapedArticle } from '@/types/news'
 import { formatDistanceToNow } from 'date-fns'
 
 export function NewsPage() {
@@ -28,7 +28,8 @@ export function NewsPage() {
   const { data: games } = useTrackedGames()
   const { data: trackedGamesNews, isLoading: isLoadingTrackedNews, refetch: refetchTrackedNews } = useTrackedGamesNews(games || [])
   const { data: searchResults, isLoading: isSearching } = useSearchNews(searchQuery)
-  const scrapeGameNews = useScrapeGameNews()
+  const scrapeAllGamesNews = useScrapeAllGamesNews()
+  const cleanupOldNews = useCleanupOldNews()
 
   // Determine which news to display
   const displayedNews: ScrapedArticle[] = searchQuery.trim() 
@@ -55,32 +56,23 @@ export function NewsPage() {
 
     setIsRefreshing(true)
     try {
-      // Scrape news for each tracked game
-      const scrapePromises = games.map(game =>
-        scrapeGameNews.mutateAsync({
-          gameTitle: game.title
-        })
-      )
-
-      await Promise.allSettled(scrapePromises)
+      await scrapeAllGamesNews.mutateAsync(games)
+      // Refresh the tracked games news after scraping
+      await refetchTrackedNews()
     } finally {
       setIsRefreshing(false)
     }
   }
 
-
-
   /**
-   * Get sentiment badge color
+   * Handle manual cleanup of old articles
    */
-  function getSentimentColor(sentiment: string | null): string {
-    switch (sentiment) {
-      case 'positive': return 'bg-green-100 text-green-800 hover:bg-green-200'
-      case 'negative': return 'bg-red-100 text-red-800 hover:bg-red-200'
-      case 'neutral': return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-      default: return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-    }
+  async function handleCleanupOldNews() {
+    await cleanupOldNews.mutateAsync(4) // Clean up articles older than 4 days
+    // The hook will automatically show a toast and refresh the data
   }
+
+
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -113,11 +105,21 @@ export function NewsPage() {
           </Button>
           <Button
             onClick={handleScrapeAllNews}
-            disabled={isRefreshing || scrapeGameNews.isPending || !games?.length}
+            disabled={isRefreshing || scrapeAllGamesNews.isPending || !games?.length}
             size="sm"
           >
             <Filter className="h-4 w-4 mr-2" />
             Update Game News
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCleanupOldNews}
+            disabled={cleanupOldNews.isPending}
+            title="Remove articles older than 4 days to free up space"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Cleanup
           </Button>
         </div>
       </div>
@@ -277,14 +279,4 @@ function formatNewsDate(dateString: string | null): string {
   }
 }
 
-/**
- * Get sentiment badge color helper
- */
-function getSentimentColor(sentiment: string | null): string {
-  switch (sentiment) {
-    case 'positive': return 'bg-green-100 text-green-800 hover:bg-green-200'
-    case 'negative': return 'bg-red-100 text-red-800 hover:bg-red-200'
-    case 'neutral': return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-    default: return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-  }
-} 
+ 

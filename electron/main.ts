@@ -9,8 +9,12 @@ import { app, BrowserWindow, shell, ipcMain, Menu } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import dotenv from 'dotenv'
 // Import news scraper using require to avoid ES module conflicts
 let newsScraperMain: any = null
+
+// Load environment variables from .env file
+dotenv.config()
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -49,8 +53,119 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 let win: BrowserWindow | null = null
 // Here, you can also use other preload
 const preload = path.join(__dirname, 'preload.cjs')
-const url = process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000'
+const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = path.join(process.env.DIST, 'index.html')
+
+// Debug the URL and file paths
+console.log('Environment variables:')
+console.log('VITE_DEV_SERVER_URL:', process.env.VITE_DEV_SERVER_URL)
+console.log('NODE_ENV:', process.env.NODE_ENV)
+console.log('DIST:', process.env.DIST)
+console.log('DIST_ELECTRON:', process.env.DIST_ELECTRON)
+console.log('Resolved paths:')
+console.log('url:', url)
+console.log('indexHtml:', indexHtml)
+console.log('preload:', preload)
+
+// IGDB API Configuration
+let twitchAccessToken: string | null = null
+let tokenExpiryTime: number = 0
+
+// Get environment variables for main process (check both VITE_ prefixed and non-prefixed)
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || process.env.VITE_TWITCH_CLIENT_ID
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || process.env.VITE_TWITCH_CLIENT_SECRET
+
+// Debug logging
+console.log('IGDB Configuration Debug:')
+console.log('TWITCH_CLIENT_ID:', TWITCH_CLIENT_ID ? 'Set' : 'Not set')
+console.log('TWITCH_CLIENT_SECRET:', TWITCH_CLIENT_SECRET ? 'Set' : 'Not set')
+console.log('Is IGDB configured?', !!(TWITCH_CLIENT_ID && TWITCH_CLIENT_SECRET))
+
+/**
+ * Get Twitch access token for IGDB API
+ */
+async function getTwitchAccessToken(): Promise<string> {
+  // Return cached token if still valid
+  if (twitchAccessToken && Date.now() < tokenExpiryTime) {
+    return twitchAccessToken
+  }
+
+  if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) {
+    throw new Error('TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET environment variables are required')
+  }
+
+  try {
+    console.log('Getting Twitch access token...')
+    const response = await fetch('https://id.twitch.tv/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: TWITCH_CLIENT_ID,
+        client_secret: TWITCH_CLIENT_SECRET,
+        grant_type: 'client_credentials'
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Token request failed:', response.status, errorText)
+      throw new Error(`Failed to get Twitch access token: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    twitchAccessToken = data.access_token
+    tokenExpiryTime = Date.now() + (data.expires_in * 1000) - 300000 // 5 minutes buffer
+    
+    console.log('Successfully got Twitch access token')
+    return twitchAccessToken!
+  } catch (error) {
+    console.error('Error getting Twitch access token:', error)
+    throw error
+  }
+}
+
+/**
+ * Make a request to the IGDB API
+ */
+async function makeIGDBRequest(endpoint: string, query: string): Promise<any[]> {
+  const token = await getTwitchAccessToken()
+  
+  if (!TWITCH_CLIENT_ID || !token) {
+    throw new Error('IGDB API not properly configured')
+  }
+
+  try {
+    console.log('Making IGDB request:', endpoint, query)
+    
+    const response = await fetch(`https://api.igdb.com/v4/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Client-ID': TWITCH_CLIENT_ID,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'text/plain',
+      },
+      body: query
+    })
+
+    console.log('IGDB response status:', response.status)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('IGDB API request failed:', response.status, errorText)
+      throw new Error(`IGDB API request failed: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    console.log('IGDB response data:', data)
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error('IGDB API request error:', error)
+    throw error
+  }
+}
 
 /**
  * Creates the main application window
@@ -69,6 +184,10 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
+      // Allow WebSocket connections in development
+      webSecurity: !process.env.VITE_DEV_SERVER_URL,
+      // Allow loading content from localhost in development
+      allowRunningInsecureContent: !!process.env.VITE_DEV_SERVER_URL,
     },
     show: false, // Don't show until ready-to-show
     autoHideMenuBar: true, // Hide menu bar by default
@@ -95,6 +214,11 @@ async function createWindow() {
   if (url) { // electron-vite-vue#298
     console.log('Loading from URL:', url)
     win.loadURL(url)
+  } else if (process.env.NODE_ENV === 'development') {
+    // In development mode, try to connect to the dev server
+    const devServerUrl = 'http://localhost:3000'
+    console.log('Loading from dev server fallback:', devServerUrl)
+    win.loadURL(devServerUrl)
   } else {
     console.log('Loading from file:', indexHtml)
     win.loadFile(indexHtml)
@@ -104,6 +228,11 @@ async function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https:')) shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // Test active push message to Renderer-process.
+  win.webContents.on('did-finish-load', () => {
+    win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
   // Apply electron-updater
@@ -403,6 +532,131 @@ ipcMain.handle('dispose-news-scraper', async () => {
       error: error instanceof Error ? error.message : 'Unknown error' 
     }
   }
+})
+
+// IGDB IPC Handlers
+ipcMain.handle('igdb:search-games', async (_event, query: string, limit: number = 20) => {
+  try {
+    const cleanQuery = query.trim().replace(/"/g, '\\"')
+    const searchQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count,screenshots.url; search "${cleanQuery}"; where category = 0; limit ${limit};`
+    
+    const games = await makeIGDBRequest('games', searchQuery)
+    return { success: true, data: games }
+  } catch (error) {
+    console.error('Error searching games:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to search games' }
+  }
+})
+
+ipcMain.handle('igdb:get-game-by-id', async (_event, igdbId: number) => {
+  try {
+    const gameQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count,screenshots.url; where id = ${igdbId};`
+    
+    const games = await makeIGDBRequest('games', gameQuery)
+    return { success: true, data: games.length > 0 ? games[0] : null }
+  } catch (error) {
+    console.error('Error getting game by ID:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get game details' }
+  }
+})
+
+ipcMain.handle('igdb:get-popular-games', async (_event, limit: number = 50) => {
+  try {
+    const popularQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count; where category = 0 & rating_count > 100; sort rating_count desc; limit ${limit};`
+    
+    const games = await makeIGDBRequest('games', popularQuery)
+    return { success: true, data: games }
+  } catch (error) {
+    console.error('Error getting popular games:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get popular games' }
+  }
+})
+
+ipcMain.handle('igdb:get-trending-games', async (_event, genres: string[] = [], limit: number = 50) => {
+  try {
+    let trendingQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count; where category = 0 & rating_count > 50`
+    
+    // Add genre filtering if genres are provided
+    if (genres.length > 0) {
+      // Convert genre names to genre IDs for IGDB query
+      const genreMap: { [key: string]: number } = {
+        'Action': 4,
+        'Adventure': 31,
+        'RPG': 12,
+        'Strategy': 15,
+        'Simulation': 13,
+        'Sports': 14,
+        'Racing': 10,
+        'Shooter': 5,
+        'Fighting': 4,
+        'Platform': 8,
+        'Puzzle': 9,
+        'Arcade': 33,
+        'Indie': 32,
+        'MMORPG': 36,
+        'Real Time Strategy (RTS)': 11,
+        'Turn-based strategy (TBS)': 16,
+        'Tactical': 24,
+        'Hack and slash/Beat \'em up': 25,
+        'Quiz/Trivia': 26,
+        'Pinball': 30,
+        'Card & Board Game': 34,
+        'MOBA': 36,
+        'Point-and-click': 2,
+        'Music': 7,
+        'Visual Novel': 34
+      }
+      
+      const genreIds = genres.map(genre => genreMap[genre]).filter(id => id !== undefined)
+      if (genreIds.length > 0) {
+        trendingQuery += ` & genres = (${genreIds.join(',')})`
+      }
+    }
+    
+    // Sort by recent popularity (combination of rating and recent activity)
+    trendingQuery += `; sort rating_count desc; limit ${limit};`
+    
+    const games = await makeIGDBRequest('games', trendingQuery)
+    return { success: true, data: games }
+  } catch (error) {
+    console.error('Error getting trending games:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get trending games' }
+  }
+})
+
+ipcMain.handle('igdb:test-connection', async () => {
+  try {
+    console.log('Testing IGDB connection...')
+    
+    // Test token first
+    await getTwitchAccessToken()
+    console.log('Token obtained successfully')
+    
+    // Test simple query
+    const testQuery = `fields name; where id = 1942; limit 1;` // The Witcher 3
+    const games = await makeIGDBRequest('games', testQuery)
+    
+    return {
+      success: true,
+      message: `IGDB API working! Found ${games.length} games`,
+      data: games
+    }
+  } catch (error) {
+    console.error('IGDB test failed:', error)
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      data: null
+    }
+  }
+})
+
+ipcMain.handle('igdb:is-configured', () => {
+  const isConfigured = !!(TWITCH_CLIENT_ID && TWITCH_CLIENT_SECRET)
+  console.log('IGDB isConfigured check:', isConfigured)
+  console.log('CLIENT_ID present:', !!TWITCH_CLIENT_ID)
+  console.log('CLIENT_SECRET present:', !!TWITCH_CLIENT_SECRET)
+  return isConfigured
 })
 
 app.whenReady().then(createWindow)

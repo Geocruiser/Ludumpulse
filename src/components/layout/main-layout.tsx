@@ -14,6 +14,7 @@ import { TrackedGamesPage } from '@/components/pages/tracked-games-page'
 import { NewsPage } from '@/components/pages/news-page'
 import { AddGameModal } from '@/components/modals/add-game-modal'
 import { GameDetailModal } from '@/components/modals/game-detail-modal'
+import { SuggestionsPage } from '@/components/pages/suggestions-page'
 
 type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'notifications' | 'settings'
 
@@ -29,6 +30,8 @@ export function MainLayout() {
         return <TrackedGamesPage />
       case 'news':
         return <NewsPage />
+      case 'suggestions':
+        return <SuggestionsPage />
       case 'dashboard':
       default:
         return <DashboardPage onNavigateTo={setCurrentPage} />

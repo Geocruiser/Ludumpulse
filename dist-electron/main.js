@@ -2,7 +2,316 @@ import { app, ipcMain, BrowserWindow, shell, Menu } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import require$$0 from "fs";
+import require$$1 from "path";
+import require$$2 from "os";
+import require$$3 from "crypto";
+function getDefaultExportFromCjs(x) {
+  return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
+}
+var main = { exports: {} };
+const version = "17.0.1";
+const require$$4 = {
+  version
+};
+var hasRequiredMain;
+function requireMain() {
+  if (hasRequiredMain) return main.exports;
+  hasRequiredMain = 1;
+  const fs = require$$0;
+  const path2 = require$$1;
+  const os = require$$2;
+  const crypto = require$$3;
+  const packageJson = require$$4;
+  const version2 = packageJson.version;
+  const LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
+  function parse(src) {
+    const obj = {};
+    let lines = src.toString();
+    lines = lines.replace(/\r\n?/mg, "\n");
+    let match;
+    while ((match = LINE.exec(lines)) != null) {
+      const key = match[1];
+      let value = match[2] || "";
+      value = value.trim();
+      const maybeQuote = value[0];
+      value = value.replace(/^(['"`])([\s\S]*)\1$/mg, "$2");
+      if (maybeQuote === '"') {
+        value = value.replace(/\\n/g, "\n");
+        value = value.replace(/\\r/g, "\r");
+      }
+      obj[key] = value;
+    }
+    return obj;
+  }
+  function _parseVault(options) {
+    options = options || {};
+    const vaultPath = _vaultPath(options);
+    options.path = vaultPath;
+    const result = DotenvModule.configDotenv(options);
+    if (!result.parsed) {
+      const err = new Error(`MISSING_DATA: Cannot parse ${vaultPath} for an unknown reason`);
+      err.code = "MISSING_DATA";
+      throw err;
+    }
+    const keys = _dotenvKey(options).split(",");
+    const length = keys.length;
+    let decrypted;
+    for (let i = 0; i < length; i++) {
+      try {
+        const key = keys[i].trim();
+        const attrs = _instructions(result, key);
+        decrypted = DotenvModule.decrypt(attrs.ciphertext, attrs.key);
+        break;
+      } catch (error) {
+        if (i + 1 >= length) {
+          throw error;
+        }
+      }
+    }
+    return DotenvModule.parse(decrypted);
+  }
+  function _warn(message) {
+    console.error(`[dotenv@${version2}][WARN] ${message}`);
+  }
+  function _debug(message) {
+    console.log(`[dotenv@${version2}][DEBUG] ${message}`);
+  }
+  function _log(message) {
+    console.log(`[dotenv@${version2}] ${message}`);
+  }
+  function _dotenvKey(options) {
+    if (options && options.DOTENV_KEY && options.DOTENV_KEY.length > 0) {
+      return options.DOTENV_KEY;
+    }
+    if (process.env.DOTENV_KEY && process.env.DOTENV_KEY.length > 0) {
+      return process.env.DOTENV_KEY;
+    }
+    return "";
+  }
+  function _instructions(result, dotenvKey) {
+    let uri;
+    try {
+      uri = new URL(dotenvKey);
+    } catch (error) {
+      if (error.code === "ERR_INVALID_URL") {
+        const err = new Error("INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      }
+      throw error;
+    }
+    const key = uri.password;
+    if (!key) {
+      const err = new Error("INVALID_DOTENV_KEY: Missing key part");
+      err.code = "INVALID_DOTENV_KEY";
+      throw err;
+    }
+    const environment = uri.searchParams.get("environment");
+    if (!environment) {
+      const err = new Error("INVALID_DOTENV_KEY: Missing environment part");
+      err.code = "INVALID_DOTENV_KEY";
+      throw err;
+    }
+    const environmentKey = `DOTENV_VAULT_${environment.toUpperCase()}`;
+    const ciphertext = result.parsed[environmentKey];
+    if (!ciphertext) {
+      const err = new Error(`NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment ${environmentKey} in your .env.vault file.`);
+      err.code = "NOT_FOUND_DOTENV_ENVIRONMENT";
+      throw err;
+    }
+    return { ciphertext, key };
+  }
+  function _vaultPath(options) {
+    let possibleVaultPath = null;
+    if (options && options.path && options.path.length > 0) {
+      if (Array.isArray(options.path)) {
+        for (const filepath of options.path) {
+          if (fs.existsSync(filepath)) {
+            possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
+          }
+        }
+      } else {
+        possibleVaultPath = options.path.endsWith(".vault") ? options.path : `${options.path}.vault`;
+      }
+    } else {
+      possibleVaultPath = path2.resolve(process.cwd(), ".env.vault");
+    }
+    if (fs.existsSync(possibleVaultPath)) {
+      return possibleVaultPath;
+    }
+    return null;
+  }
+  function _resolveHome(envPath) {
+    return envPath[0] === "~" ? path2.join(os.homedir(), envPath.slice(1)) : envPath;
+  }
+  function _configVault(options) {
+    const debug = Boolean(options && options.debug);
+    const quiet = Boolean(options && options.quiet);
+    if (debug || !quiet) {
+      _log("Loading env from encrypted .env.vault");
+    }
+    const parsed = DotenvModule._parseVault(options);
+    let processEnv = process.env;
+    if (options && options.processEnv != null) {
+      processEnv = options.processEnv;
+    }
+    DotenvModule.populate(processEnv, parsed, options);
+    return { parsed };
+  }
+  function configDotenv(options) {
+    const dotenvPath = path2.resolve(process.cwd(), ".env");
+    let encoding = "utf8";
+    const debug = Boolean(options && options.debug);
+    const quiet = Boolean(options && options.quiet);
+    if (options && options.encoding) {
+      encoding = options.encoding;
+    } else {
+      if (debug) {
+        _debug("No encoding is specified. UTF-8 is used by default");
+      }
+    }
+    let optionPaths = [dotenvPath];
+    if (options && options.path) {
+      if (!Array.isArray(options.path)) {
+        optionPaths = [_resolveHome(options.path)];
+      } else {
+        optionPaths = [];
+        for (const filepath of options.path) {
+          optionPaths.push(_resolveHome(filepath));
+        }
+      }
+    }
+    let lastError;
+    const parsedAll = {};
+    for (const path22 of optionPaths) {
+      try {
+        const parsed = DotenvModule.parse(fs.readFileSync(path22, { encoding }));
+        DotenvModule.populate(parsedAll, parsed, options);
+      } catch (e) {
+        if (debug) {
+          _debug(`Failed to load ${path22} ${e.message}`);
+        }
+        lastError = e;
+      }
+    }
+    let processEnv = process.env;
+    if (options && options.processEnv != null) {
+      processEnv = options.processEnv;
+    }
+    const populated = DotenvModule.populate(processEnv, parsedAll, options);
+    if (debug || !quiet) {
+      const keysCount = Object.keys(populated).length;
+      const shortPaths = [];
+      for (const filePath of optionPaths) {
+        try {
+          const relative = path2.relative(process.cwd(), filePath);
+          shortPaths.push(relative);
+        } catch (e) {
+          if (debug) {
+            _debug(`Failed to load ${filePath} ${e.message}`);
+          }
+          lastError = e;
+        }
+      }
+      _log(`injecting env (${keysCount}) from ${shortPaths.join(",")} – [tip] encrypt with dotenvx: https://dotenvx.com`);
+    }
+    if (lastError) {
+      return { parsed: parsedAll, error: lastError };
+    } else {
+      return { parsed: parsedAll };
+    }
+  }
+  function config(options) {
+    if (_dotenvKey(options).length === 0) {
+      return DotenvModule.configDotenv(options);
+    }
+    const vaultPath = _vaultPath(options);
+    if (!vaultPath) {
+      _warn(`You set DOTENV_KEY but you are missing a .env.vault file at ${vaultPath}. Did you forget to build it?`);
+      return DotenvModule.configDotenv(options);
+    }
+    return DotenvModule._configVault(options);
+  }
+  function decrypt(encrypted, keyStr) {
+    const key = Buffer.from(keyStr.slice(-64), "hex");
+    let ciphertext = Buffer.from(encrypted, "base64");
+    const nonce = ciphertext.subarray(0, 12);
+    const authTag = ciphertext.subarray(-16);
+    ciphertext = ciphertext.subarray(12, -16);
+    try {
+      const aesgcm = crypto.createDecipheriv("aes-256-gcm", key, nonce);
+      aesgcm.setAuthTag(authTag);
+      return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
+    } catch (error) {
+      const isRange = error instanceof RangeError;
+      const invalidKeyLength = error.message === "Invalid key length";
+      const decryptionFailed = error.message === "Unsupported state or unable to authenticate data";
+      if (isRange || invalidKeyLength) {
+        const err = new Error("INVALID_DOTENV_KEY: It must be 64 characters long (or more)");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      } else if (decryptionFailed) {
+        const err = new Error("DECRYPTION_FAILED: Please check your DOTENV_KEY");
+        err.code = "DECRYPTION_FAILED";
+        throw err;
+      } else {
+        throw error;
+      }
+    }
+  }
+  function populate(processEnv, parsed, options = {}) {
+    const debug = Boolean(options && options.debug);
+    const override = Boolean(options && options.override);
+    const populated = {};
+    if (typeof parsed !== "object") {
+      const err = new Error("OBJECT_REQUIRED: Please check the processEnv argument being passed to populate");
+      err.code = "OBJECT_REQUIRED";
+      throw err;
+    }
+    for (const key of Object.keys(parsed)) {
+      if (Object.prototype.hasOwnProperty.call(processEnv, key)) {
+        if (override === true) {
+          processEnv[key] = parsed[key];
+          populated[key] = parsed[key];
+        }
+        if (debug) {
+          if (override === true) {
+            _debug(`"${key}" is already defined and WAS overwritten`);
+          } else {
+            _debug(`"${key}" is already defined and was NOT overwritten`);
+          }
+        }
+      } else {
+        processEnv[key] = parsed[key];
+        populated[key] = parsed[key];
+      }
+    }
+    return populated;
+  }
+  const DotenvModule = {
+    configDotenv,
+    _configVault,
+    _parseVault,
+    config,
+    decrypt,
+    parse,
+    populate
+  };
+  main.exports.configDotenv = DotenvModule.configDotenv;
+  main.exports._configVault = DotenvModule._configVault;
+  main.exports._parseVault = DotenvModule._parseVault;
+  main.exports.config = DotenvModule.config;
+  main.exports.decrypt = DotenvModule.decrypt;
+  main.exports.parse = DotenvModule.parse;
+  main.exports.populate = DotenvModule.populate;
+  main.exports = DotenvModule;
+  return main.exports;
+}
+var mainExports = requireMain();
+const dotenv = /* @__PURE__ */ getDefaultExportFromCjs(mainExports);
 let newsScraperMain = null;
+dotenv.config();
 const require2 = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.DIST_ELECTRON = path.join(__dirname, "../");
@@ -17,8 +326,91 @@ if (!app.requestSingleInstanceLock()) {
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 let win = null;
 const preload = path.join(__dirname, "preload.cjs");
-const url = process.env.VITE_DEV_SERVER_URL || "http://localhost:3000";
+const url = process.env.VITE_DEV_SERVER_URL;
 const indexHtml = path.join(process.env.DIST, "index.html");
+console.log("Environment variables:");
+console.log("VITE_DEV_SERVER_URL:", process.env.VITE_DEV_SERVER_URL);
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("DIST:", process.env.DIST);
+console.log("DIST_ELECTRON:", process.env.DIST_ELECTRON);
+console.log("Resolved paths:");
+console.log("url:", url);
+console.log("indexHtml:", indexHtml);
+console.log("preload:", preload);
+let twitchAccessToken = null;
+let tokenExpiryTime = 0;
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || process.env.VITE_TWITCH_CLIENT_ID;
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || process.env.VITE_TWITCH_CLIENT_SECRET;
+console.log("IGDB Configuration Debug:");
+console.log("TWITCH_CLIENT_ID:", TWITCH_CLIENT_ID ? "Set" : "Not set");
+console.log("TWITCH_CLIENT_SECRET:", TWITCH_CLIENT_SECRET ? "Set" : "Not set");
+console.log("Is IGDB configured?", !!(TWITCH_CLIENT_ID && TWITCH_CLIENT_SECRET));
+async function getTwitchAccessToken() {
+  if (twitchAccessToken && Date.now() < tokenExpiryTime) {
+    return twitchAccessToken;
+  }
+  if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) {
+    throw new Error("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET environment variables are required");
+  }
+  try {
+    console.log("Getting Twitch access token...");
+    const response = await fetch("https://id.twitch.tv/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        client_id: TWITCH_CLIENT_ID,
+        client_secret: TWITCH_CLIENT_SECRET,
+        grant_type: "client_credentials"
+      })
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Token request failed:", response.status, errorText);
+      throw new Error(`Failed to get Twitch access token: ${response.statusText}`);
+    }
+    const data = await response.json();
+    twitchAccessToken = data.access_token;
+    tokenExpiryTime = Date.now() + data.expires_in * 1e3 - 3e5;
+    console.log("Successfully got Twitch access token");
+    return twitchAccessToken;
+  } catch (error) {
+    console.error("Error getting Twitch access token:", error);
+    throw error;
+  }
+}
+async function makeIGDBRequest(endpoint, query) {
+  const token = await getTwitchAccessToken();
+  if (!TWITCH_CLIENT_ID || !token) {
+    throw new Error("IGDB API not properly configured");
+  }
+  try {
+    console.log("Making IGDB request:", endpoint, query);
+    const response = await fetch(`https://api.igdb.com/v4/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Client-ID": TWITCH_CLIENT_ID,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "text/plain"
+      },
+      body: query
+    });
+    console.log("IGDB response status:", response.status);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("IGDB API request failed:", response.status, errorText);
+      throw new Error(`IGDB API request failed: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json();
+    console.log("IGDB response data:", data);
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error("IGDB API request error:", error);
+    throw error;
+  }
+}
 async function createWindow() {
   win = new BrowserWindow({
     title: "Ludumpulse",
@@ -32,7 +424,11 @@ async function createWindow() {
       // Secure settings for modern Electron apps
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: false,
+      // Allow WebSocket connections in development
+      webSecurity: !process.env.VITE_DEV_SERVER_URL,
+      // Allow loading content from localhost in development
+      allowRunningInsecureContent: !!process.env.VITE_DEV_SERVER_URL
     },
     show: false,
     // Don't show until ready-to-show
@@ -52,13 +448,23 @@ async function createWindow() {
     NODE_ENV: process.env.NODE_ENV,
     indexHtml
   });
-  {
+  if (url) {
     console.log("Loading from URL:", url);
     win.loadURL(url);
+  } else if (process.env.NODE_ENV === "development") {
+    const devServerUrl = "http://localhost:3000";
+    console.log("Loading from dev server fallback:", devServerUrl);
+    win.loadURL(devServerUrl);
+  } else {
+    console.log("Loading from file:", indexHtml);
+    win.loadFile(indexHtml);
   }
   win.webContents.setWindowOpenHandler(({ url: url2 }) => {
     if (url2.startsWith("https:")) shell.openExternal(url2);
     return { action: "deny" };
+  });
+  win.webContents.on("did-finish-load", () => {
+    win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
   });
 }
 const NEWS_SOURCES = [
@@ -309,6 +715,109 @@ ipcMain.handle("dispose-news-scraper", async () => {
     };
   }
 });
+ipcMain.handle("igdb:search-games", async (_event, query, limit = 20) => {
+  try {
+    const cleanQuery = query.trim().replace(/"/g, '\\"');
+    const searchQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count,screenshots.url; search "${cleanQuery}"; where category = 0; limit ${limit};`;
+    const games = await makeIGDBRequest("games", searchQuery);
+    return { success: true, data: games };
+  } catch (error) {
+    console.error("Error searching games:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to search games" };
+  }
+});
+ipcMain.handle("igdb:get-game-by-id", async (_event, igdbId) => {
+  try {
+    const gameQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count,screenshots.url; where id = ${igdbId};`;
+    const games = await makeIGDBRequest("games", gameQuery);
+    return { success: true, data: games.length > 0 ? games[0] : null };
+  } catch (error) {
+    console.error("Error getting game by ID:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to get game details" };
+  }
+});
+ipcMain.handle("igdb:get-popular-games", async (_event, limit = 50) => {
+  try {
+    const popularQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count; where category = 0 & rating_count > 100; sort rating_count desc; limit ${limit};`;
+    const games = await makeIGDBRequest("games", popularQuery);
+    return { success: true, data: games };
+  } catch (error) {
+    console.error("Error getting popular games:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to get popular games" };
+  }
+});
+ipcMain.handle("igdb:get-trending-games", async (_event, genres = [], limit = 50) => {
+  try {
+    let trendingQuery = `fields id,name,summary,cover.url,first_release_date,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher,rating,rating_count; where category = 0 & rating_count > 50`;
+    if (genres.length > 0) {
+      const genreMap = {
+        "Action": 4,
+        "Adventure": 31,
+        "RPG": 12,
+        "Strategy": 15,
+        "Simulation": 13,
+        "Sports": 14,
+        "Racing": 10,
+        "Shooter": 5,
+        "Fighting": 4,
+        "Platform": 8,
+        "Puzzle": 9,
+        "Arcade": 33,
+        "Indie": 32,
+        "MMORPG": 36,
+        "Real Time Strategy (RTS)": 11,
+        "Turn-based strategy (TBS)": 16,
+        "Tactical": 24,
+        "Hack and slash/Beat 'em up": 25,
+        "Quiz/Trivia": 26,
+        "Pinball": 30,
+        "Card & Board Game": 34,
+        "MOBA": 36,
+        "Point-and-click": 2,
+        "Music": 7,
+        "Visual Novel": 34
+      };
+      const genreIds = genres.map((genre) => genreMap[genre]).filter((id) => id !== void 0);
+      if (genreIds.length > 0) {
+        trendingQuery += ` & genres = (${genreIds.join(",")})`;
+      }
+    }
+    trendingQuery += `; sort rating_count desc; limit ${limit};`;
+    const games = await makeIGDBRequest("games", trendingQuery);
+    return { success: true, data: games };
+  } catch (error) {
+    console.error("Error getting trending games:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to get trending games" };
+  }
+});
+ipcMain.handle("igdb:test-connection", async () => {
+  try {
+    console.log("Testing IGDB connection...");
+    await getTwitchAccessToken();
+    console.log("Token obtained successfully");
+    const testQuery = `fields name; where id = 1942; limit 1;`;
+    const games = await makeIGDBRequest("games", testQuery);
+    return {
+      success: true,
+      message: `IGDB API working! Found ${games.length} games`,
+      data: games
+    };
+  } catch (error) {
+    console.error("IGDB test failed:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error",
+      data: null
+    };
+  }
+});
+ipcMain.handle("igdb:is-configured", () => {
+  const isConfigured = !!(TWITCH_CLIENT_ID && TWITCH_CLIENT_SECRET);
+  console.log("IGDB isConfigured check:", isConfigured);
+  console.log("CLIENT_ID present:", !!TWITCH_CLIENT_ID);
+  console.log("CLIENT_SECRET present:", !!TWITCH_CLIENT_SECRET);
+  return isConfigured;
+});
 app.whenReady().then(createWindow);
 app.on("window-all-closed", () => {
   win = null;
@@ -337,8 +846,10 @@ ipcMain.handle("open-win", (_, arg) => {
       sandbox: false
     }
   });
-  {
+  if (url) {
     childWindow.loadURL(`${url}#${arg}`);
+  } else {
+    childWindow.loadFile(indexHtml, { hash: arg });
   }
 });
 const createMenu = () => {

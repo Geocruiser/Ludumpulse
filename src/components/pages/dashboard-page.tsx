@@ -20,11 +20,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GameSummaries } from '@/components/game-summaries'
+import { SuggestionsPreview } from '@/components/suggestions-preview'
 import { useTrackedGames } from '@/hooks/use-games'
 import { useGameStore } from '@/lib/stores/game-store'
 
 interface DashboardPageProps {
-  onNavigateTo: (page: 'games' | 'news') => void
+  onNavigateTo: (page: 'games' | 'news' | 'suggestions') => void
 }
 
 /**
@@ -161,6 +162,7 @@ export function DashboardPage({ onNavigateTo }: DashboardPageProps) {
           transition={{ duration: 0.5, delay: 0.2 }}
         >
           <GameSummaries games={games} />
+          <SuggestionsPreview onViewAll={() => onNavigateTo('suggestions')} />
         </motion.div>
       ) : (
         /* Getting Started Section */

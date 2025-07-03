@@ -7,7 +7,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useAuth } from '@/lib/auth/auth-context'
 import { LoginForm } from '@/components/auth/login-form'
 import { SignupForm } from '@/components/auth/signup-form'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

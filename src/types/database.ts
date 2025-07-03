@@ -19,6 +19,17 @@ export interface TrackedGame {
   release_status: 'RELEASED' | 'UNRELEASED'
   created_at: string
   updated_at: string
+  // IGDB Integration Fields
+  igdb_id?: number
+  cover_art_url?: string
+  description?: string
+  release_date?: string
+  developer?: string
+  publisher?: string
+  genres: string[]
+  platforms: string[]
+  rating?: number
+  screenshots: string[]
 }
 
 export interface NewsItem {

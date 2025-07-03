@@ -34,11 +34,24 @@ model TrackedGame {
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
   
+  // IGDB Integration Fields
+  igdbId        Int?         @map("igdb_id")
+  coverArtUrl   String?      @map("cover_art_url")
+  description   String?      @db.Text
+  releaseDate   DateTime?    @map("release_date")
+  developer     String?
+  publisher     String?
+  genres        String[]
+  platforms     String[]
+  rating        Int?
+  screenshots   String[]
+  
   // Relationships
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   newsItems NewsItem[]
   notifications Notification[]
 
+  @@unique([userId, igdbId], name: "unique_user_igdb_game")
   @@map("tracked_games")
 }
 

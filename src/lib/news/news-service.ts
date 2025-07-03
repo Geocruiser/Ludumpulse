@@ -4,6 +4,13 @@
  */
 
 import { ScrapingResult, ScrapedArticle } from '../../types/news'
+import { 
+  saveNewsArticles, 
+  getNewsForTrackedGames, 
+  searchStoredNews,
+  getTrackedGames,
+  cleanupOldNews 
+} from '../database'
 
 // NewsAPI configuration with fallback
 const NEWS_API_KEY = import.meta.env.VITE_NEWS_API_KEY || (() => {
@@ -73,9 +80,9 @@ function isGamingRelevant(title: string, description: string | null): boolean {
 }
 
 /**
- * Main function to scrape and process gaming news
+ * Main function to scrape and process gaming news - now saves to database
  */
-export async function scrapeGameNews(gameTitle: string): Promise<ScrapingResult> {
+export async function scrapeGameNews(gameTitle: string, saveToDb: boolean = true): Promise<ScrapingResult> {
   try {
     console.log(`Fetching news for: ${gameTitle}`)
     
@@ -86,15 +93,22 @@ export async function scrapeGameNews(gameTitle: string): Promise<ScrapingResult>
     const relevantArticles: ScrapedArticle[] = []
     
     for (const article of newsResponse.articles) {
-      // Filter for gaming relevance
+      // Filter for gaming relevance and exclude non-game content
       if (isGamingRelevant(article.title, article.description)) {
-        relevantArticles.push({
+        const scrapedArticle: ScrapedArticle = {
           title: article.title,
           url: article.url,
           publishedAt: article.publishedAt,
           summary: article.description,
           source: article.source.name
-        })
+        }
+        
+        // Apply enhanced filtering to exclude gaming chairs, novels, merchandise, etc.
+        if (!isGarbageArticle(scrapedArticle)) {
+          relevantArticles.push(scrapedArticle)
+        } else {
+          console.log(`🚫 Filtered out non-game content: "${article.title}"`)
+        }
       }
     }
     
@@ -106,6 +120,32 @@ export async function scrapeGameNews(gameTitle: string): Promise<ScrapingResult>
     })
     
     console.log(`Found ${relevantArticles.length} relevant articles for ${gameTitle}`)
+    
+    // Save to database if requested and we have articles
+    if (saveToDb && relevantArticles.length > 0) {
+      try {
+        // Find the game in tracked games to get the ID
+        const trackedGamesResult = await getTrackedGames()
+        if (trackedGamesResult.success && trackedGamesResult.data) {
+          const matchingGame = trackedGamesResult.data.find(
+            game => game.title.toLowerCase() === gameTitle.toLowerCase()
+          )
+          
+          if (matchingGame) {
+            await saveNewsArticles(matchingGame.id, relevantArticles.map(article => ({
+              title: article.title,
+              summary: article.summary,
+              fullArticleUrl: article.url,
+              publishedAt: article.publishedAt
+            })))
+            console.log(`Saved ${relevantArticles.length} articles to database for ${gameTitle}`)
+          }
+        }
+      } catch (dbError) {
+        console.error('Error saving news to database:', dbError)
+        // Continue without failing the scraping operation
+      }
+    }
     
     return {
       sourceId: 'ai-news-api',
@@ -137,13 +177,20 @@ export async function fetchGeneralGamingNews(): Promise<ScrapingResult> {
     
     for (const article of newsResponse.articles) {
       if (isGamingRelevant(article.title, article.description)) {
-        gamingArticles.push({
+        const scrapedArticle: ScrapedArticle = {
           title: article.title,
           url: article.url,
           publishedAt: article.publishedAt,
           summary: article.description,
           source: article.source.name
-        })
+        }
+        
+        // Apply enhanced filtering to exclude gaming chairs, novels, merchandise, etc.
+        if (!isGarbageArticle(scrapedArticle)) {
+          gamingArticles.push(scrapedArticle)
+        } else {
+          console.log(`🚫 Filtered out non-game content: "${article.title}"`)
+        }
       }
     }
     
@@ -176,37 +223,39 @@ export async function fetchGeneralGamingNews(): Promise<ScrapingResult> {
  */
 export async function searchNews(query: string): Promise<ScrapingResult> {
   try {
-    const searchQuery = `${query} gaming OR "video games"`
-    const newsResponse = await fetchNewsFromAPI(searchQuery, 20)
+    // Search stored news first
+    const dbResult = await searchStoredNews(query, undefined, 30)
     
-    const searchResults: ScrapedArticle[] = []
-    
-    for (const article of newsResponse.articles) {
-      searchResults.push({
-        title: article.title,
-        url: article.url,
-        publishedAt: article.publishedAt,
-        summary: article.description,
-        source: article.source.name
-      })
+    if (dbResult.success && dbResult.data) {
+      const articles: ScrapedArticle[] = dbResult.data.map(newsItem => ({
+        title: newsItem.title,
+        url: newsItem.full_article_url || '',
+        publishedAt: newsItem.published_at?.toString() || newsItem.created_at,
+        summary: newsItem.summary || null,
+        source: newsItem.game?.title || 'Unknown Game'
+      })).filter(article => article.url)
+      
+      console.log(`Found ${articles.length} stored articles matching search: "${query}"`)
+      
+      return {
+        sourceId: 'search-stored',
+        success: true,
+        articles,
+        scrapedAt: new Date().toISOString()
+      }
     }
     
-    searchResults.sort((a, b) => {
-      const dateA = a.publishedAt ? new Date(a.publishedAt) : new Date(0)
-      const dateB = b.publishedAt ? new Date(b.publishedAt) : new Date(0)
-      return dateB.getTime() - dateA.getTime()
-    })
-    
+    // Fallback to empty results
     return {
-      sourceId: 'ai-news-api',
+      sourceId: 'search-stored',
       success: true,
-      articles: searchResults,
+      articles: [],
       scrapedAt: new Date().toISOString()
     }
   } catch (error) {
-    console.error('Error searching news:', error)
+    console.error('Error searching stored news:', error)
     return {
-      sourceId: 'ai-news-api',
+      sourceId: 'search-stored',
       success: false,
       articles: [],
       error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -247,8 +296,8 @@ function isGarbageArticle(article: ScrapedArticle): boolean {
     'preview', 'early access thoughts', 'beta impressions'
   ]
   
-  // Alternate media patterns (books, movies, merchandise, etc.)
-  const alternateMediaPatterns = [
+  // Non-game content patterns (books, movies, merchandise, hardware, etc.)
+  const nonGameContentPatterns = [
     // Books and literature (comprehensive)
     'book', 'novel', 'novella', 'comic', 'manga', 'graphic novel', 'literature',
     'fiction', 'story', 'tale', 'chronicle', 'saga', 'epic', 'anthology',
@@ -261,24 +310,66 @@ function isGarbageArticle(article: ScrapedArticle): boolean {
     // Movies and TV
     'movie', 'film', 'tv show', 'television', 'series', 'netflix', 'streaming',
     'hbo', 'disney+', 'amazon prime', 'hulu', 'paramount+', 'apple tv',
-    'cinema', 'theater', 'theatrical', 'premiere', 'screening',
+    'cinema', 'theater', 'theatrical', 'premiere', 'screening', 'actor', 'actress',
+    'director', 'producer', 'cast', 'filming', 'box office', 'hollywood',
     
-    // Merchandise and collectibles
-    'merchandise', 'merch', 'figure', 'figurine', 'collectible', 'statue',
-    'clothing', 'apparel', 't-shirt', 'hoodie', 'poster', 'art print',
-    'funko', 'toys', 'plushie', 'calendar', 'artbook', 'art book',
+    // Gaming Hardware & Peripherals (comprehensive)
+    'gaming chair', 'chair', 'desk', 'gaming desk', 'monitor', 'display',
+    'headset', 'headphones', 'keyboard', 'mouse', 'mousepad', 'speakers',
+    'webcam', 'microphone', 'mic', 'controller', 'gamepad', 'joystick',
+    'graphics card', 'gpu', 'cpu', 'processor', 'motherboard', 'ram', 'memory',
+    'hard drive', 'ssd', 'storage', 'power supply', 'psu', 'cooling', 'fan',
+    'case', 'pc build', 'gaming pc', 'laptop', 'gaming laptop', 'setup',
+    'cable', 'adapter', 'hub', 'dock', 'stand', 'mount', 'lighting', 'rgb',
+    'mechanical keyboard', 'wireless mouse', 'gaming mouse', 'gaming headset',
+    'surround sound', 'audio interface', 'capture card', 'streaming setup',
+    
+    // Console Hardware & Accessories
+    'console', 'xbox series', 'playstation 5', 'ps5', 'nintendo switch',
+    'steam deck', 'handheld', 'portable console', 'joy-con', 'pro controller',
+    'charging station', 'dock', 'carrying case', 'screen protector',
+    'external storage', 'ssd expansion', 'memory card', 'hard drive expansion',
+    
+    // Clothing & Physical Merchandise
+    'merchandise', 'merch', 'clothing', 'apparel', 't-shirt', 'tshirt', 'shirt',
+    'hoodie', 'sweater', 'jacket', 'pants', 'shorts', 'socks', 'hat', 'cap',
+    'beanie', 'scarf', 'gloves', 'shoes', 'sneakers', 'slippers', 'pajamas',
+    'costume', 'cosplay', 'uniform', 'jersey', 'dress', 'skirt', 'backpack',
+    'bag', 'wallet', 'purse', 'watch', 'jewelry', 'necklace', 'ring',
+    
+    // Collectibles & Physical Items
+    'figure', 'figurine', 'collectible', 'statue', 'bust', 'replica',
+    'poster', 'art print', 'canvas', 'wall art', 'decoration', 'ornament',
+    'funko', 'pop figure', 'action figure', 'toys', 'plushie', 'stuffed animal',
+    'calendar', 'artbook', 'art book', 'coffee table book', 'guide book',
+    'strategy guide', 'manual', 'cookbook', 'recipe book', 'board game',
+    'card game', 'trading cards', 'stickers', 'pins', 'badges', 'patches',
+    'keychain', 'lanyard', 'mug', 'cup', 'bottle', 'tumbler', 'coaster',
+    'mousepad', 'desk mat', 'cushion', 'pillow', 'blanket', 'throw',
+    
+    // Retail & Shopping Terms
     'limited edition', 'exclusive', 'pre-order', 'collector\'s edition',
+    'special edition', 'deluxe edition', 'ultimate edition', 'premium edition',
+    'bundle', 'package', 'set', 'collection', 'box set', 'gift set',
+    'on sale', 'discount', 'price drop', 'deal', 'offer', 'promotion',
+    'black friday', 'cyber monday', 'holiday sale', 'clearance',
+    'amazon', 'best buy', 'target', 'walmart', 'gamestop', 'retail',
+    'store', 'shop', 'marketplace', 'ebay', 'etsy', 'shipping', 'delivery',
     
     // Music and audio
-    'soundtrack', 'album', 'music', 'composer', 'score', 'ost',
-    'vinyl', 'cd', 'digital album', 'spotify', 'apple music',
+    'soundtrack', 'album', 'music', 'composer', 'score', 'ost', 'theme song',
+    'vinyl', 'cd', 'digital album', 'spotify', 'apple music', 'bandcamp',
+    'concert', 'live performance', 'orchestra', 'symphony', 'musician',
+    'singer', 'vocalist', 'band', 'artist', 'recording', 'studio album',
     
-    // General media terms
-    'biography', 'documentary', 'behind the scenes', 'making of',
-    'novelization', 'adaptation', 'based on', 'inspired by',
+    // General media & promotional terms
+    'biography', 'documentary', 'behind the scenes', 'making of', 'interview',
+    'novelization', 'adaptation', 'based on', 'inspired by', 'spin-off',
     'tie-in', 'spin-off media', 'licensed product', 'brand partnership',
     'collaboration', 'crossover event', 'promotional', 'marketing campaign',
-    'contest', 'giveaway', 'sweepstakes', 'raffle'
+    'advertisement', 'commercial', 'sponsored', 'partnership', 'endorsement',
+    'contest', 'giveaway', 'sweepstakes', 'raffle', 'lottery', 'prize',
+    'unboxing', 'haul', 'review video', 'first look', 'hands-on video'
   ]
   
   // Business/Industry patterns (not about game content)
@@ -305,8 +396,8 @@ function isGarbageArticle(article: ScrapedArticle): boolean {
     }
   }
   
-  // Check for alternate media patterns (books, movies, etc.)
-  for (const pattern of alternateMediaPatterns) {
+  // Check for non-game content patterns (books, movies, hardware, merchandise, etc.)
+  for (const pattern of nonGameContentPatterns) {
     if (content.includes(pattern)) {
       return true
     }
@@ -323,151 +414,7 @@ function isGarbageArticle(article: ScrapedArticle): boolean {
 }
 
 /**
- * Check if an article title specifically mentions the tracked game
- */
-function isGameRelevant(article: ScrapedArticle, gameTitle: string): { relevant: boolean; score: number; gameTitle: string } {
-  const articleTitle = article.title.toLowerCase()
-  const gameTitleLower = gameTitle.toLowerCase()
-  
-  // First check if it's a garbage article
-  if (isGarbageArticle(article)) {
-    return {
-      relevant: false,
-      score: 0,
-      gameTitle
-    }
-  }
-  
-  // Extract game name parts for better matching
-  const gameWords = gameTitleLower.split(/[\s\-_:]+/).filter(word => word.length > 2)
-  
-  let score = 0
-  let titleMatches = 0
-  
-  // Exact title match in article title (highest priority)
-  if (articleTitle.includes(gameTitleLower)) {
-    score += 200
-    titleMatches++
-  }
-  
-  // Individual significant word matches in title only
-  gameWords.forEach(word => {
-    if (articleTitle.includes(word)) {
-      score += 50
-      titleMatches++
-    }
-  })
-  
-  // Franchise/series matching in title (specific patterns)
-  const franchisePatterns = [
-    { pattern: 'call of duty', aliases: ['cod'] },
-    { pattern: 'elder scrolls', aliases: ['skyrim', 'morrowind', 'oblivion'] },
-    { pattern: 'grand theft auto', aliases: ['gta'] },
-    { pattern: 'final fantasy', aliases: ['ff'] },
-    { pattern: 'assassin\'s creed', aliases: ['assassins creed'] },
-    { pattern: 'battlefield', aliases: [] },
-    { pattern: 'pokemon', aliases: ['pokémon'] },
-    { pattern: 'super mario', aliases: ['mario'] },
-    { pattern: 'zelda', aliases: ['legend of zelda'] },
-    { pattern: 'halo', aliases: [] },
-    { pattern: 'minecraft', aliases: [] },
-    { pattern: 'fortnite', aliases: [] },
-    { pattern: 'apex legends', aliases: ['apex'] },
-    { pattern: 'world of warcraft', aliases: ['wow'] },
-    { pattern: 'counter-strike', aliases: ['cs', 'csgo', 'cs2'] },
-    { pattern: 'league of legends', aliases: ['lol'] },
-    { pattern: 'overwatch', aliases: [] },
-    { pattern: 'cyberpunk 2077', aliases: ['cyberpunk'] },
-    { pattern: 'the witcher', aliases: ['witcher'] },
-    { pattern: 'red dead', aliases: ['rdr'] }
-  ]
-  
-  franchisePatterns.forEach(({ pattern, aliases }) => {
-    if (gameTitleLower.includes(pattern)) {
-      if (articleTitle.includes(pattern)) {
-        score += 150
-        titleMatches++
-      }
-      aliases.forEach(alias => {
-        if (articleTitle.includes(alias)) {
-          score += 120
-          titleMatches++
-        }
-      })
-    }
-  })
-  
-  // CRITICAL priority for patch notes and updates (massive boost)
-  const criticalUpdatePatterns = [
-    'patch notes', 'hotfix', 'patch', 'game update', 'title update',
-    'content update', 'changelog', 'release notes', 'bug fix', 'fixes'
-  ]
-  
-  // High priority for other update content
-  const highUpdatePatterns = [
-    'update', 'version', 'build', 'balance changes', 'buffs', 'nerfs',
-    'rework', 'overhaul', 'maintenance', 'stability', 'performance'
-  ]
-  
-  // Medium priority for future content
-  const mediumUpdatePatterns = [
-    'coming to', 'coming soon', 'roadmap', 'season', 'expansion',
-    'dlc', 'new content', 'upcoming', 'next update', 'beta', 'alpha',
-    'early access', 'what\'s new', 'new features'
-  ]
-  
-  // Critical updates get massive boost (patches, hotfixes, etc.)
-  criticalUpdatePatterns.forEach(pattern => {
-    if (articleTitle.includes(pattern)) {
-      score += 500 // Massive boost for critical updates
-      titleMatches++
-    }
-  })
-  
-  // High priority updates get major boost
-  highUpdatePatterns.forEach(pattern => {
-    if (articleTitle.includes(pattern)) {
-      score += 350 // Major boost for high priority updates
-      titleMatches++
-    }
-  })
-  
-  // Medium priority updates get moderate boost
-  mediumUpdatePatterns.forEach(pattern => {
-    if (articleTitle.includes(pattern)) {
-      score += 200 // Moderate boost for medium priority updates
-      titleMatches++
-    }
-  })
-  
-  // Medium priority for announcements and releases
-  const announcementPatterns = [
-    'announced', 'reveals', 'confirmed', 'official', 'launch',
-    'release date', 'trailer', 'teaser', 'gameplay', 'showcase',
-    'developer', 'studio', 'team', 'news', 'breaking'
-  ]
-  
-  announcementPatterns.forEach(pattern => {
-    if (articleTitle.includes(pattern)) {
-      score += 100 // Moderate boost for announcements
-    }
-  })
-  
-  // Bonus for multiple word matches (indicates stronger relevance)
-  if (titleMatches >= 2) {
-    score += 50
-  }
-  
-  // Only consider articles that have at least one meaningful match in the title
-  return {
-    relevant: score >= 50 && titleMatches > 0, // Much higher threshold, title-focused
-    score,
-    gameTitle
-  }
-}
-
-/**
- * Fetch news specifically for tracked games
+ * Fetch news specifically for tracked games - now uses database
  */
 export async function fetchTrackedGamesNews(gameList: Array<{ id: string, title: string }>): Promise<ScrapingResult> {
   try {
@@ -480,71 +427,38 @@ export async function fetchTrackedGamesNews(gameList: Array<{ id: string, title:
       }
     }
 
-    console.log(`Fetching news for ${gameList.length} tracked games`)
+    console.log(`Fetching stored news for ${gameList.length} tracked games`)
     
-    // Create search query heavily prioritizing game updates, excluding alternate media
-    const gameNames = gameList.map(game => `"${game.title}"`).join(' OR ')
-    const query = `(${gameNames}) AND ("patch notes" OR hotfix OR "game update" OR "title update" OR "content update" OR patch OR update OR "balance changes" OR "bug fix" OR changelog OR "release notes" OR version OR build OR maintenance OR stability OR performance OR dlc OR expansion OR "coming to" OR "coming soon" OR beta OR alpha OR trailer OR release OR announcement OR launch) -guide -tutorial -review -"how to" -tips -walkthrough -opinion -analysis -"first impressions" -preview -hands-on -book -novel -novella -fiction -story -tale -chronicle -saga -epic -anthology -paperback -hardcover -ebook -"e-book" -audiobook -"audio book" -author -writer -published -publishing -publisher -publication -chapter -"prequel novel" -"sequel novel" -"tie-in novel" -"spin-off book" -"lore book" -"companion book" -"official novel" -"canon novel" -bestseller -movie -film -"tv show" -television -series -netflix -streaming -hbo -disney -cinema -theater -theatrical -premiere -screening -merchandise -merch -figure -figurine -collectible -statue -clothing -apparel -"t-shirt" -hoodie -poster -soundtrack -album -music -composer -funko -toys -plushie -calendar -artbook -"art book" -"limited edition" -exclusive -"pre-order" -"collector's edition" -vinyl -cd -"digital album" -spotify -biography -documentary -"behind the scenes" -"making of" -novelization -adaptation -"tie-in" -"spin-off media" -"licensed product" -collaboration -promotional -contest -giveaway -sweepstakes`
+    // Get news from database first
+    const gameIds = gameList.map(game => game.id)
+    const dbResult = await getNewsForTrackedGames(gameIds, 50)
     
-    const newsResponse = await fetchNewsFromAPI(query, 100)
-    
-    const trackedGameArticles: (ScrapedArticle & { matchedGame?: string; relevanceScore?: number })[] = []
-    
-    for (const article of newsResponse.articles) {
-      // Check if article is gaming relevant first
-      if (!isGamingRelevant(article.title, article.description)) {
-        continue
-      }
+    if (dbResult.success && dbResult.data) {
+      // Convert database format to ScrapedArticle format
+      const articles: ScrapedArticle[] = dbResult.data.map(newsItem => ({
+        title: newsItem.title,
+        url: newsItem.full_article_url || '',
+        publishedAt: newsItem.published_at?.toString() || newsItem.created_at,
+        summary: newsItem.summary || null,
+        source: 'Database'
+      })).filter(article => article.url) // Only include articles with URLs
       
-      const scrapedArticle: ScrapedArticle = {
-        title: article.title,
-        url: article.url,
-        publishedAt: article.publishedAt,
-        summary: article.description,
-        source: article.source.name
-      }
+      console.log(`Found ${articles.length} stored news articles for tracked games`)
       
-      // Check relevance to each tracked game
-      let bestMatch = { relevant: false, score: 0, gameTitle: '' }
-      
-      for (const game of gameList) {
-        const match = isGameRelevant(scrapedArticle, game.title)
-        if (match.relevant && match.score > bestMatch.score) {
-          bestMatch = match
-        }
-      }
-      
-      // Only include articles that are relevant to at least one tracked game
-      if (bestMatch.relevant) {
-        trackedGameArticles.push({
-          ...scrapedArticle,
-          matchedGame: bestMatch.gameTitle,
-          relevanceScore: bestMatch.score
-        })
+      return {
+        sourceId: 'tracked-games-news',
+        success: true,
+        articles,
+        scrapedAt: new Date().toISOString()
       }
     }
     
-    // Sort by relevance score first, then by date
-    trackedGameArticles.sort((a, b) => {
-      const scoreA = a.relevanceScore || 0
-      const scoreB = b.relevanceScore || 0
-      
-      if (scoreA !== scoreB) {
-        return scoreB - scoreA // Higher score first
-      }
-      
-      // If scores are equal, sort by date
-      const dateA = a.publishedAt ? new Date(a.publishedAt) : new Date(0)
-      const dateB = b.publishedAt ? new Date(b.publishedAt) : new Date(0)
-      return dateB.getTime() - dateA.getTime()
-    })
-    
-    console.log(`Found ${trackedGameArticles.length} news articles for tracked games (excluding guides/opinions)`)
-    
+    // Fallback to empty results if database query fails
+    console.log('No stored news found, returning empty results')
     return {
       sourceId: 'tracked-games-news',
       success: true,
-      articles: trackedGameArticles.slice(0, 25), // Return top 25 most relevant
+      articles: [],
       scrapedAt: new Date().toISOString()
     }
   } catch (error) {
@@ -556,5 +470,95 @@ export async function fetchTrackedGamesNews(gameList: Array<{ id: string, title:
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       scrapedAt: new Date().toISOString()
     }
+  }
+}
+
+/**
+ * Scrape fresh news for all tracked games and save to database
+ * Automatically cleans up old articles (4+ days) to prevent database bloat
+ */
+export async function scrapeNewsForAllGames(gameList: Array<{ id: string, title: string }>): Promise<ScrapingResult> {
+  try {
+    if (!gameList.length) {
+      return {
+        sourceId: 'fresh-scrape',
+        success: true,
+        articles: [],
+        scrapedAt: new Date().toISOString()
+      }
+    }
+
+    console.log(`Scraping fresh news for ${gameList.length} tracked games`)
+    
+    // Clean up old articles first (4+ days old)
+    try {
+      const cleanupResult = await cleanupOldNews(4)
+      if (cleanupResult.success && cleanupResult.data && cleanupResult.data.deletedCount > 0) {
+        console.log(`🧹 Cleaned up ${cleanupResult.data.deletedCount} old articles before scraping`)
+      }
+    } catch (cleanupError) {
+      console.warn('⚠️ Failed to cleanup old articles:', cleanupError)
+      // Continue with scraping even if cleanup fails
+    }
+    
+    const allArticles: ScrapedArticle[] = []
+    const errors: string[] = []
+    
+    // Scrape news for each game
+    for (const game of gameList) {
+      try {
+        const result = await scrapeGameNews(game.title, true) // saveToDb = true
+        if (result.success) {
+          allArticles.push(...result.articles)
+        } else {
+          errors.push(`${game.title}: ${result.error}`)
+        }
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100))
+      } catch (error) {
+        errors.push(`${game.title}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    }
+    
+    console.log(`Scraped ${allArticles.length} total articles for all tracked games`)
+    
+    return {
+      sourceId: 'fresh-scrape',
+      success: true,
+      articles: allArticles,
+      error: errors.length > 0 ? `Some games failed: ${errors.join(', ')}` : undefined,
+      scrapedAt: new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Error scraping news for all games:', error)
+    return {
+      sourceId: 'fresh-scrape',
+      success: false,
+      articles: [],
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      scrapedAt: new Date().toISOString()
+    }
+  }
+}
+
+/**
+ * Initialize news service and perform cleanup
+ * Call this on app startup to clean up old articles automatically
+ */
+export async function initializeNewsService(): Promise<void> {
+  try {
+    console.log('🚀 Initializing news service...')
+    
+    // Clean up articles older than 4 days on startup
+    const cleanupResult = await cleanupOldNews(4)
+    if (cleanupResult.success && cleanupResult.data && cleanupResult.data.deletedCount > 0) {
+      console.log(`🧹 Startup cleanup: Removed ${cleanupResult.data.deletedCount} old articles`)
+    } else {
+      console.log('✅ Database clean - no old articles to remove')
+    }
+  } catch (error) {
+    console.warn('⚠️ Failed to cleanup old articles on startup:', error)
+    // Don't throw - this shouldn't block app startup
   }
 } 

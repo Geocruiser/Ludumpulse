@@ -16,28 +16,11 @@ export default defineConfig(({ mode }) => {
         {
           // Main-Process entry file of the Electron App.
           entry: 'electron/main.ts',
-        },
-        {
-          entry: 'electron/preload.ts',
-          vite: {
-            build: {
-              outDir: 'dist-electron',
-              lib: {
-                entry: 'electron/preload.ts',
-                formats: ['cjs'],
-                fileName: () => 'preload.cjs'
-              },
-              rollupOptions: {
-                external: ['electron']
-              }
-            },
-          },
-          onstart(options: { reload: () => void }) {
-            // Notify the Renderer-Process to reload the page when the Preload-Scripts build is complete, 
-            // instead of restarting the entire Electron App.
-            options.reload()
+          onstart({ startup }) {
+            startup()
           },
         },
+        // Note: Using preload-minimal.js directly (CommonJS) to avoid ES module issues
       ]),
       renderer(),
     ],
@@ -60,6 +43,12 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       strictPort: true,
+      host: 'localhost',
+      hmr: {
+        port: 3000,
+        host: 'localhost',
+      },
+      cors: true,
     },
     clearScreen: false,
   }

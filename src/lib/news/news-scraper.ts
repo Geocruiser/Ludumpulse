@@ -6,7 +6,7 @@
  */
 
 import puppeteer, { Browser, Page } from 'puppeteer'
-import { NewsSource, NewsItem, ScrapingResult } from '@/types/news'
+import { NewsSource, ScrapingResult } from '@/types/news'
 
 export interface ScrapingConfig {
   maxConcurrentPages: number

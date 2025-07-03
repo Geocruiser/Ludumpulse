@@ -8,7 +8,7 @@
 import { NewsScraper } from './news-scraper'
 import { getAllNewsSources } from './sources'
 import { supabase } from '@/lib/supabase'
-import { NewsItem, ScrapingResult, ScrapedArticle, NewsJobStatus } from '@/types/news'
+import { NewsItem, ScrapedArticle, NewsJobStatus } from '@/types/news'
 
 export class NewsManager {
   private scraper: NewsScraper

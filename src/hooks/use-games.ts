@@ -7,6 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { addTrackedGame } from '@/lib/database'
 import { useAuth } from '@/lib/auth/auth-context'
 import { useToast } from '@/hooks/use-toast'
 import { GameFilters, GameSortConfig } from '@/lib/stores/game-store'
@@ -19,12 +20,34 @@ export interface TrackedGame {
   release_status: 'RELEASED' | 'UNRELEASED'
   created_at: string
   updated_at: string
+  // IGDB Integration Fields
+  igdb_id?: number
+  cover_art_url?: string
+  description?: string
+  release_date?: string
+  developer?: string
+  publisher?: string
+  genres: string[]
+  platforms: string[]
+  rating?: number
+  screenshots: string[]
 }
 
 export interface CreateGameData {
   title: string
   tags: string[]
   releaseStatus: 'RELEASED' | 'UNRELEASED'
+  // IGDB fields (optional)
+  igdbId?: number
+  coverArtUrl?: string
+  description?: string
+  releaseDate?: string
+  developer?: string
+  publisher?: string
+  genres?: string[]
+  platforms?: string[]
+  rating?: number
+  screenshots?: string[]
 }
 
 export interface UpdateGameData extends Partial<CreateGameData> {
@@ -119,19 +142,13 @@ export function useCreateGame() {
     mutationFn: async (gameData: CreateGameData) => {
       if (!user?.id) throw new Error('User not authenticated')
       
-      const { data, error } = await supabase
-        .from('tracked_games')
-        .insert({
-          user_id: user.id,
-          title: gameData.title,
-          tags: gameData.tags,
-          release_status: gameData.releaseStatus,
-        })
-        .select()
-        .single()
+      const result = await addTrackedGame(gameData)
       
-      if (error) throw error
-      return data as TrackedGame
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      
+      return result.data
     },
     onSuccess: (newGame) => {
       // Invalidate and refetch games list
@@ -139,7 +156,7 @@ export function useCreateGame() {
       
       toast({
         title: 'Game Added',
-        description: `${newGame.title} has been added to your tracked games.`,
+        description: `${newGame?.title} has been added to your tracked games.`,
       })
     },
     onError: (error) => {
