@@ -22,6 +22,7 @@ import {
   getSharedContent,
   markSharedContentAsRead
 } from '@/lib/friends/friends-service'
+import { useNotificationStore } from '@/lib/stores/notification-store'
 import type { 
   Friend, 
   FriendRequest, 
@@ -34,10 +35,10 @@ import type {
  * Hook for managing friends list
  */
 export function useFriends() {
+  const { toast } = useToast()
   const [friends, setFriends] = useState<Friend[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { toast } = useToast()
 
   const fetchFriends = useCallback(async () => {
     setIsLoading(true)
@@ -81,7 +82,7 @@ export function useFriends() {
     isLoading,
     error,
     refetch: fetchFriends,
-    removeFriend: handleRemoveFriend
+    removeFriend: handleRemoveFriend,
   }
 }
 
@@ -197,6 +198,7 @@ export function useUserSearch() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
+  const { fetchUnreadFriendCount } = useNotificationStore()
 
   const searchForUsers = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -238,6 +240,9 @@ export function useUserSearch() {
         title: 'Friend request sent',
         description: 'Your friend request has been sent.'
       })
+
+      // Refetch count to update UI immediately
+      await fetchUnreadFriendCount()
     } else {
       toast({
         title: 'Error',
@@ -245,7 +250,7 @@ export function useUserSearch() {
         variant: 'destructive'
       })
     }
-  }, [toast])
+  }, [toast, fetchUnreadFriendCount])
 
   const clearSearch = useCallback(() => {
     setUsers([])
@@ -304,62 +309,73 @@ export function useFriendGames(friendId: string) {
  */
 export function useContentSharing() {
   const [isSharing, setIsSharing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
+  const { fetchUnreadFriendCount } = useNotificationStore()
 
-  const shareNews = useCallback(async (
+  const handleShareNewsItem = useCallback(async (
     friendId: string, 
     newsItemId: string, 
     message?: string
   ) => {
     setIsSharing(true)
+    setError(null)
     
     const result = await shareNewsItem(friendId, newsItemId, message)
     
     if (result.success) {
       toast({
-        title: 'News shared',
-        description: 'News item has been shared with your friend.'
+        title: 'Content Shared',
+        description: 'News item has been shared successfully.',
       })
+      await fetchUnreadFriendCount()
     } else {
+      const errorMessage = result.error || 'Failed to share news item.'
+      setError(errorMessage)
       toast({
         title: 'Error',
-        description: result.error || 'Failed to share news item',
-        variant: 'destructive'
+        description: errorMessage,
+        variant: 'destructive',
       })
     }
     
     setIsSharing(false)
-  }, [toast])
+  }, [toast, fetchUnreadFriendCount])
 
-  const shareGame = useCallback(async (
+  const handleShareTrackedGame = useCallback(async (
     friendId: string, 
     gameId: string, 
     message?: string
   ) => {
     setIsSharing(true)
-    
+    setError(null)
+
     const result = await shareTrackedGame(friendId, gameId, message)
     
     if (result.success) {
       toast({
-        title: 'Game shared',
-        description: 'Game has been shared with your friend.'
+        title: 'Content Shared',
+        description: 'Game has been shared successfully.',
       })
+      await fetchUnreadFriendCount()
     } else {
+      const errorMessage = result.error || 'Failed to share game.'
+      setError(errorMessage)
       toast({
         title: 'Error',
-        description: result.error || 'Failed to share game',
-        variant: 'destructive'
+        description: errorMessage,
+        variant: 'destructive',
       })
     }
-    
+
     setIsSharing(false)
-  }, [toast])
+  }, [toast, fetchUnreadFriendCount])
 
   return {
     isSharing,
-    shareNews,
-    shareGame
+    error,
+    shareNews: handleShareNewsItem,
+    shareGame: handleShareTrackedGame
   }
 }
 

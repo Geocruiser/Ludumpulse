@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +41,8 @@ import {
   useUserSearch, 
   useSharedContent 
 } from '@/hooks/use-friends'
+import { useNotificationStore } from '@/lib/stores/notification-store'
+import { markAllFriendNotificationsAsRead } from '@/lib/notifications/friends-notifications'
 
 /**
  * Main friends page component with tabs for different sections
@@ -74,6 +76,11 @@ export function FriendsPage() {
     isLoading: sharedContentLoading, 
     markAsRead 
   } = useSharedContent()
+  
+  const { 
+    unreadFriendCount: unreadFriendNotifications, 
+    fetchUnreadFriendCount: refetchUnreadCount 
+  } = useNotificationStore()
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -99,7 +106,16 @@ export function FriendsPage() {
     console.log('View shared content:', contentId, contentType)
   }
 
-  const unreadSharedCount = sharedContent.filter(content => !content.read).length
+  // When the 'requests' or 'shared' tab is viewed, mark notifications as read
+  useEffect(() => {
+    if (activeTab === 'requests' || activeTab === 'shared') {
+      const markAsReadAndUpdate = async () => {
+        await markAllFriendNotificationsAsRead()
+        refetchUnreadCount()
+      }
+      markAsReadAndUpdate()
+    }
+  }, [activeTab, refetchUnreadCount])
 
   // Find the selected friend's information
   const selectedFriend = friends.find(f => f.friend_id === selectedFriendId)
@@ -234,7 +250,7 @@ export function FriendsPage() {
               <Heart className="w-5 h-5 text-red-500" />
               <div>
                 <p className="text-sm font-medium">Unread</p>
-                <p className="text-2xl font-bold">{unreadSharedCount}</p>
+                <p className="text-2xl font-bold">{unreadFriendNotifications}</p>
               </div>
             </div>
           </CardContent>
@@ -277,9 +293,9 @@ export function FriendsPage() {
           <TabsTrigger value="shared" className="flex items-center space-x-2">
             <Share2 className="w-4 h-4" />
             <span>Shared</span>
-            {unreadSharedCount > 0 && (
+            {unreadFriendNotifications > 0 && (
               <Badge variant="destructive" className="ml-1">
-                {unreadSharedCount}
+                {unreadFriendNotifications}
               </Badge>
             )}
           </TabsTrigger>

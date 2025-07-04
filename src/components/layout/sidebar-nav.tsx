@@ -9,6 +9,8 @@
 import React from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { useNotificationStore } from '@/lib/stores/notification-store'
 import { 
   Home, 
   Gamepad2, 
@@ -46,18 +48,13 @@ const navigationItems = [
     icon: Users,
   },
   {
-    title: 'Notifications',
-    href: '/notifications',
-    icon: Bell,
-  },
-  {
     title: 'Settings',
     href: '/settings',
     icon: Settings,
   },
 ]
 
-type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'friends' | 'notifications' | 'settings'
+type PageType = 'dashboard' | 'games' | 'news' | 'suggestions' | 'friends' | 'settings'
 
 interface SidebarNavProps {
   currentPage: PageType
@@ -68,6 +65,8 @@ interface SidebarNavProps {
  * Sidebar navigation with main application links
  */
 export function SidebarNav({ currentPage, onPageChange }: SidebarNavProps) {
+  const unreadFriendNotifications = useNotificationStore((state) => state.unreadFriendCount)
+  
   const getPageType = (href: string): PageType => {
     switch (href) {
       case '/': return 'dashboard'
@@ -75,7 +74,6 @@ export function SidebarNav({ currentPage, onPageChange }: SidebarNavProps) {
       case '/news': return 'news'
       case '/suggestions': return 'suggestions'
       case '/friends': return 'friends'
-      case '/notifications': return 'notifications'
       case '/settings': return 'settings'
       default: return 'dashboard'
     }
@@ -87,6 +85,7 @@ export function SidebarNav({ currentPage, onPageChange }: SidebarNavProps) {
         {navigationItems.map((item) => {
           const pageType = getPageType(item.href)
           const isActive = currentPage === pageType
+          const showBadge = item.title === 'Friends' && unreadFriendNotifications > 0
           
           return (
             <Button
@@ -94,14 +93,17 @@ export function SidebarNav({ currentPage, onPageChange }: SidebarNavProps) {
               variant="ghost"
               onClick={() => onPageChange(pageType)}
               className={cn(
-                "w-full justify-start",
+                "w-full justify-start relative",
                 isActive 
                   ? "bg-accent text-accent-foreground" 
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               <item.icon className="mr-2 h-4 w-4" />
-              {item.title}
+              <span className="flex-grow text-left">{item.title}</span>
+              {showBadge && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-red-500"></span>
+              )}
             </Button>
           )
         })}
